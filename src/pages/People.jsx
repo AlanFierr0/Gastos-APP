@@ -5,14 +5,28 @@ import { formatMoney } from '../utils/format.js';
 export default function People() {
   const { persons, addPerson, updatePerson, removePerson, income, expenses, t } = useApp();
   const [name, setName] = useState('');
+  const [formError, setFormError] = useState('');
 
   const totalsByPerson = useMemo(() => computeTotalsByPerson(persons, income, expenses), [persons, income, expenses]);
 
   function onAddPerson(e) {
     e.preventDefault();
-    addPerson(name);
+    const trimmed = String(name || '').trim();
+    if (!trimmed) {
+      setFormError(t('name'));
+      return;
+    }
+    const exists = persons.some((p) => p.name.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      setFormError('Already exists');
+      return;
+    }
+    addPerson(trimmed);
     setName('');
+    setFormError('');
   }
+
+  const isDisabled = !String(name || '').trim();
 
   return (
     <div className="flex flex-col gap-6">
@@ -24,13 +38,17 @@ export default function People() {
         <form onSubmit={onAddPerson} className="flex items-center gap-2">
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); setFormError(''); }}
             placeholder={t('name')}
             className="h-9 px-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm"
           />
-          <button type="submit" className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-medium">{t('addPerson')}</button>
+          <button type="submit" disabled={isDisabled} className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{t('addPerson')}</button>
         </form>
       </header>
+
+      {formError && (
+        <div className="text-sm text-red-500">{formError}</div>
+      )}
 
       <section className="rounded-xl border border-gray-200 dark:border-gray-800 p-6 bg-white dark:bg-gray-900/50">
         <div className="flow-root">

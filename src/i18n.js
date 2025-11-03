@@ -38,6 +38,22 @@ export const dictionaries = {
     incomeTotal: 'Income Total',
     expenseTotal: 'Expense Total',
     netTotal: 'Net',
+    // New common/UI
+    searchInNotes: 'Search in notes',
+    allOption: 'All',
+    searchBySource: 'Search by source',
+    // Analysis page
+    analysisTitle: 'Financial Analysis',
+    analysisSubtitle: 'Comparatives by month and category.',
+    incomeVsExpenses6m: 'Income vs. Expenses (last 6 months)',
+    // Upload page
+    uploadTitle: 'Import Your Expense History',
+    uploadSubtitle: 'Upload and synchronize historical data from Excel or CSV files.',
+    syncing: 'Synchronize Data',
+    uploading: 'Uploading...',
+    analyzingFile: 'Analyzing your file...',
+    fileValidated: 'File validated. Ready to synchronize.',
+    uploadFailed: 'Upload failed. Please ensure the file format is correct.',
   },
   es: {
     appName: 'Gastos APP',
@@ -78,6 +94,22 @@ export const dictionaries = {
     incomeTotal: 'Total Ingresos',
     expenseTotal: 'Total Gastos',
     netTotal: 'Neto',
+    // New common/UI
+    searchInNotes: 'Buscar en notas',
+    allOption: 'Todos',
+    searchBySource: 'Buscar por origen',
+    // Analysis page
+    analysisTitle: 'Análisis Financiero',
+    analysisSubtitle: 'Comparativos por mes y categoría.',
+    incomeVsExpenses6m: 'Ingresos vs. Gastos (últimos 6 meses)',
+    // Upload page
+    uploadTitle: 'Importá tu historial de gastos',
+    uploadSubtitle: 'Subí y sincronizá datos históricos desde archivos Excel o CSV.',
+    syncing: 'Sincronizar datos',
+    uploading: 'Subiendo...',
+    analyzingFile: 'Analizando tu archivo...',
+    fileValidated: 'Archivo validado. Listo para sincronizar.',
+    uploadFailed: 'Falló la subida. Verificá que el formato del archivo sea correcto.',
   },
 };
 

@@ -2,7 +2,7 @@
 // Adjust BASE_URL to match your server
 import axios from 'axios';
 
-const BASE_URL = import.meta?.env?.VITE_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta?.env?.VITE_API_URL || 'http://localhost:6543';
 const http = axios.create({ baseURL: BASE_URL, timeout: 12000 });
 
 export async function getExpenses(params) {
@@ -23,8 +23,22 @@ export async function getIncome(params) {
   }
 }
 
+export async function getPersons() {
+  try {
+    const { data } = await http.get('/persons');
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createPerson(payload) {
+  const { data } = await http.post('/persons', payload);
+  return data;
+}
+
 export async function uploadExcel(formData) {
-  const { data } = await http.post('/upload', formData, {
+  const { data } = await http.post('/upload/excel', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;

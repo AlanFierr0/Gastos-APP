@@ -7,6 +7,7 @@ const AppContext = createContext(null);
 export function AppProvider({ children }) {
   const [expenses, setExpenses] = useState([]);
   const [income, setIncome] = useState([]);
+  const [persons, setPersons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [locale, setLocale] = useState('es');
@@ -18,24 +19,16 @@ export function AppProvider({ children }) {
     }
     return 'light';
   });
-  const [persons, setPersons] = useState(() => {
-    try {
-      const raw = window.localStorage.getItem('persons');
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
 
   useEffect(() => {
     // Preload minimal data from backend (if available)
     (async () => {
       try {
         setLoading(true);
-        const [e, i] = await Promise.allSettled([api.getExpenses(), api.getIncome()]);
+        const [e, i, p] = await Promise.allSettled([api.getExpenses(), api.getIncome(), api.getPersons()]);
         if (e.status === 'fulfilled') setExpenses(e.value);
         if (i.status === 'fulfilled') setIncome(i.value);
+        if (p.status === 'fulfilled') setPersons(p.value);
       } catch (err) {
         setError(err);
       } finally {
@@ -56,12 +49,6 @@ export function AppProvider({ children }) {
     } catch {}
   }, [theme]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('persons', JSON.stringify(persons));
-    } catch {}
-  }, [persons]);
-
   const totals = useMemo(() => {
     const totalExpenses = expenses.reduce((acc, r) => acc + Number(r.amount || 0), 0);
     const totalIncome = income.reduce((acc, r) => acc + Number(r.amount || 0), 0);
@@ -72,11 +59,18 @@ export function AppProvider({ children }) {
     };
   }, [expenses, income]);
 
+  function personNameById(id) {
+    const p = persons.find((x) => x.id === id);
+    return p ? p.name : '';
+  }
+
   const value = {
     expenses,
     income,
+    persons,
     setExpenses,
     setIncome,
+    setPersons,
     loading,
     error,
     totals,
@@ -87,14 +81,18 @@ export function AppProvider({ children }) {
     theme,
     setTheme,
     toggleTheme: () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark')),
-    persons,
-    addPerson(name) {
+    async addPerson(name) {
       const trimmed = String(name || '').trim();
       if (!trimmed) return;
-      const exists = persons.some((p) => p.name.toLowerCase() === trimmed.toLowerCase());
-      if (exists) return;
-      const newPerson = { id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2), name: trimmed };
-      setPersons((prev) => [...prev, newPerson]);
+      // optimistic add
+      const optimistic = { id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2), name: trimmed };
+      setPersons((prev) => [...prev, optimistic]);
+      try {
+        const saved = await api.createPerson({ name: trimmed });
+        if (saved && saved.id) {
+          setPersons((prev) => [saved, ...prev.filter((p) => p.id !== optimistic.id)]);
+        }
+      } catch {}
     },
     updatePerson(id, name) {
       const trimmed = String(name || '').trim();
@@ -108,6 +106,7 @@ export function AppProvider({ children }) {
       const optimistic = {
         id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         ...newIncome,
+        person: personNameById(newIncome.personId) || newIncome.person,
       };
       setIncome((prev) => [optimistic, ...prev]);
       try {
@@ -120,10 +119,10 @@ export function AppProvider({ children }) {
       }
     },
     async addExpense(newExpense) {
-      // optimistic create; will use backend if disponible
       const optimistic = {
         id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         ...newExpense,
+        person: personNameById(newExpense.personId) || newExpense.person,
       };
       setExpenses((prev) => [optimistic, ...prev]);
       try {

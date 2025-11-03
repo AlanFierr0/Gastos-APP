@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import Card from '../components/Card.jsx';
-import { LineSeries, PieBreakdown } from '../components/Chart.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { formatMoney } from '../utils/format.js';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
-  const { totals, expenses, income, t, locale, addExpense, addIncome } = useApp();
+  const { expenses, income, t, locale } = useApp();
   const [selectedMonth, setSelectedMonth] = useState(() => getCurrentYearMonth());
+  const navigate = useNavigate();
 
   const months = useMemo(() => buildAvailableMonths(expenses, income, locale), [expenses, income, locale]);
 
@@ -16,28 +17,13 @@ export default function Dashboard() {
   const { monthExpenses, monthIncome } = useMemo(() => filterByMonth(expenses, income, effectiveMonth), [expenses, income, effectiveMonth]);
   const monthTotals = useMemo(() => computeTotals(monthExpenses, monthIncome), [monthExpenses, monthIncome]);
 
-  function handleAddIncome() {
-    const base = handlePrompt({ amount: '', date: '' });
-    if (!base) return;
-    const source = window.prompt('Source', '') || '';
-    const person = window.prompt('Person (name)', '') || '';
-    const currency = 'USD';
-    addIncome({ amount: base.amount, date: base.date, source, person, currency });
+  function handleGoToIncome() {
+    navigate('/income');
   }
 
-  function handleAddExpense() {
-    const base = handlePrompt({ amount: '', date: '' });
-    if (!base) return;
-    const category = window.prompt('Category', '') || '';
-    const notes = window.prompt('Notes', '') || '';
-    const person = window.prompt('Person (name)', '') || '';
-    const currency = 'USD';
-    addExpense({ amount: base.amount, date: base.date, category, notes, person, currency });
+  function handleGoToExpenses() {
+    navigate('/expenses');
   }
-
-  // Use live data only: aggregate minimally when available, otherwise charts will be empty
-  const lineData = [];
-  const pieData = [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -48,13 +34,13 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleAddIncome}
+            onClick={handleGoToIncome}
             className="h-9 px-3 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
           >
             {t('addIncome')}
           </button>
           <button
-            onClick={handleAddExpense}
+            onClick={handleGoToExpenses}
             className="h-9 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
           >
             {t('addExpense')}
@@ -86,18 +72,10 @@ export default function Dashboard() {
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card title={t('incomeVsExpenses')} className="lg:col-span-2">
-          {lineData.length ? (
-            <LineSeries data={lineData} />
-          ) : (
-            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
-          )}
+          <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
         </Card>
         <Card title={t('expenseBreakdown')}>
-          {pieData.length ? (
-            <PieBreakdown data={pieData} />
-          ) : (
-            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
-          )}
+          <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
         </Card>
       </section>
 
@@ -213,21 +191,6 @@ function computeTotals(expenses = [], income = []) {
     totalIncome,
     balance: totalIncome - totalExpenses,
   };
-}
-
-function parseNumber(input) {
-  const num = Number(String(input || '').toString().replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(num) ? num : 0;
-}
-
-function handlePrompt(defaults) {
-  const amountStr = window.prompt('Amount', defaults.amount ?? '');
-  if (amountStr == null) return null;
-  const amount = parseNumber(amountStr);
-  const dateStr = window.prompt('Date (YYYY-MM-DD)', defaults.date ?? new Date().toISOString().slice(0, 10));
-  if (dateStr == null) return null;
-  const date = new Date(dateStr).toISOString();
-  return { amount, date };
 }
 
 

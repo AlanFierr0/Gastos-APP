@@ -6,7 +6,7 @@ import Card from '../components/Card.jsx';
 import { useApp } from '../context/AppContext.jsx';
 
 export default function Expenses() {
-  const { expenses, addExpense, t } = useApp();
+  const { expenses, addExpense, t, persons } = useApp();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -39,6 +39,7 @@ export default function Expenses() {
       currency: values.currency || 'USD',
       date: values.date,
       notes: values.notes,
+      personId: values.personId,
     });
     reset();
     setShowForm(false);
@@ -56,9 +57,9 @@ export default function Expenses() {
 
       <Card>
         <div className="flex flex-col md:flex-row gap-3">
-          <input className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder="Search in notes" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder={t('searchInNotes')} value={query} onChange={(e) => setQuery(e.target.value)} />
           <select className="form-select rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">All</option>
+            <option value="">{t('allOption')}</option>
             {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
@@ -92,6 +93,15 @@ export default function Expenses() {
             <div className="flex flex-col gap-1">
               <label className="text-sm text-[#616f89]">Date</label>
               <input type="date" {...register('date', { required: true })} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" />
+            </div>
+            <div className="flex flex-col gap-1 md:col-span-4">
+              <label className="text-sm text-[#616f89]">Person</label>
+              <select {...register('personId', { required: true })} className="form-select rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
+                <option value="">Select a person</option>
+                {persons.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </div>
             <div className="flex flex-col gap-1 md:col-span-4">
               <label className="text-sm text-[#616f89]">Notes</label>
