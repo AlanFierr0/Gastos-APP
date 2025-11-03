@@ -5,11 +5,11 @@ import FileUpload from '@/components/FileUpload';
 import DataTable from '@/components/DataTable';
 
 export default function UploadPage() {
-  const { gastos, loading } = useGastos();
+  const { gastos, loading, refetch } = useGastos();
 
   const handleUploadSuccess = () => {
-    // Force reload of the page to refresh data
-    window.location.reload();
+    // Refetch data after successful upload
+    refetch();
   };
 
   return (

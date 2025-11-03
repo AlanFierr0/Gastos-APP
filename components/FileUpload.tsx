@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import { useUpload } from '@/hooks/useUpload';
 
 interface FileUploadProps {
@@ -10,6 +10,7 @@ interface FileUploadProps {
 export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const { uploadFile, uploading, error, success, reset } = useUpload();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -32,8 +33,9 @@ export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
     if (result) {
       setFile(null);
       // Reset the file input
-      const input = document.getElementById('file-input') as HTMLInputElement;
-      if (input) input.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       
       onUploadSuccess?.();
     }
@@ -89,6 +91,7 @@ export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
             >
               <span>Selecciona un archivo</span>
               <input
+                ref={fileInputRef}
                 id="file-input"
                 type="file"
                 className="sr-only"
@@ -129,8 +132,9 @@ export default function FileUpload({ onUploadSuccess }: FileUploadProps) {
             onClick={() => {
               setFile(null);
               reset();
-              const input = document.getElementById('file-input') as HTMLInputElement;
-              if (input) input.value = '';
+              if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+              }
             }}
             className="text-red-600 hover:text-red-800"
           >

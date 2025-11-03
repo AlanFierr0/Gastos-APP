@@ -15,6 +15,7 @@ import {
   Cell,
   LineChart,
   Line,
+  PieLabelRenderProps,
 } from 'recharts';
 import { Gasto } from '@/types';
 
@@ -94,7 +95,10 @@ export default function Charts({ gastos }: ChartsProps) {
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
+              label={(props: PieLabelRenderProps) => {
+                const { name, percent } = props as PieLabelRenderProps & { name: string; percent: number };
+                return `${name}: ${(percent * 100).toFixed(0)}%`;
+              }}
               outerRadius={100}
               fill="#8884d8"
               dataKey="value"
