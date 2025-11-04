@@ -32,6 +32,20 @@ export async function getPersons() {
   }
 }
 
+export async function getCategories() {
+  try {
+    const { data } = await http.get('/categories');
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createCategory(payload) {
+  const { data } = await http.post('/categories', payload);
+  return data;
+}
+
 export async function createPerson(payload) {
   const { data } = await http.post('/persons', payload);
   return data;
@@ -49,8 +63,28 @@ export async function createExpense(payload) {
   return data;
 }
 
+export async function updateExpense(id, payload) {
+  const { data } = await http.put(`/expenses/${id}`, payload);
+  return data;
+}
+
+export async function deleteExpense(id) {
+  const { data } = await http.delete(`/expenses/${id}`);
+  return data;
+}
+
 export async function createIncome(payload) {
   const { data } = await http.post('/income', payload);
+  return data;
+}
+
+export async function updateIncome(id, payload) {
+  const { data } = await http.put(`/income/${id}`, payload);
+  return data;
+}
+
+export async function deleteIncome(id) {
+  const { data } = await http.delete(`/income/${id}`);
   return data;
 }
 

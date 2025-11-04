@@ -8,6 +8,8 @@ export const dictionaries = {
     upload: 'Upload',
     monthlyOverview: 'Monthly Overview',
     monthlyOverviewSub: "Here's your financial summary for this month.",
+    summaryTitle: 'Summary',
+    summarySub: 'Select period to view your finances.',
     expenseOverview: 'Expense Overview',
     expenseOverviewSub: "Manage your family's expenses in one place.",
     familyIncome: 'Family Income',
@@ -54,6 +56,10 @@ export const dictionaries = {
     analyzingFile: 'Analyzing your file...',
     fileValidated: 'File validated. Ready to synchronize.',
     uploadFailed: 'Upload failed. Please ensure the file format is correct.',
+    // Period selector
+    period: 'Period',
+    periodMonth: 'Month',
+    periodYear: 'Year',
   },
   es: {
     appName: 'Gastos APP',
@@ -64,6 +70,8 @@ export const dictionaries = {
     upload: 'Importar',
     monthlyOverview: 'Resumen Mensual',
     monthlyOverviewSub: 'Resumen financiero del mes.',
+    summaryTitle: 'Resumen',
+    summarySub: 'Elegí periodo para ver tus finanzas.',
     expenseOverview: 'Vista de Gastos',
     expenseOverviewSub: 'Gestioná los gastos en un solo lugar.',
     familyIncome: 'Ingresos Familiares',
@@ -110,6 +118,10 @@ export const dictionaries = {
     analyzingFile: 'Analizando tu archivo...',
     fileValidated: 'Archivo validado. Listo para sincronizar.',
     uploadFailed: 'Falló la subida. Verificá que el formato del archivo sea correcto.',
+    // Period selector
+    period: 'Período',
+    periodMonth: 'Mes',
+    periodYear: 'Año',
   },
 };
 
