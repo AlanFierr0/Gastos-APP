@@ -91,7 +91,7 @@ export default function People() {
 
   // Debug: log when selectedPersonId changes
   React.useEffect(() => {
-    console.log('selectedPersonId changed to:', selectedPersonId);
+    
   }, [selectedPersonId]);
 
   function onAddPerson(e) {
@@ -142,7 +142,7 @@ export default function People() {
             className="h-9 px-3 pr-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm appearance-none"
             value={selectedPersonId || ''}
             onChange={(e) => {
-              console.log('Select changed to:', e.target.value);
+              
               setSelectedPersonId(e.target.value);
             }}
           >
@@ -243,7 +243,7 @@ export default function People() {
                         e.preventDefault();
                         e.stopPropagation();
                         const personId = p.id;
-                        console.log('View Details clicked - Person:', p.name, 'ID:', personId, 'Type:', typeof personId);
+                        
                         setSelectedPersonId(personId);
                         // Scroll to top after a short delay to allow state update
                         setTimeout(() => {
@@ -457,7 +457,7 @@ function getCurrentYearMonth() {
       return `${yearPart.value}-${monthPart.value}`;
     }
   } catch (e) {
-    console.log('getCurrentYearMonth - Intl failed:', e);
+    
   }
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, '0');

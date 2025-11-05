@@ -25,7 +25,7 @@ function getCategoryColor(categoryName) {
   return `hsl(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`;
 }
 
-// (removed unused getPersonColor)
+
 
 export default function Spreadsheet() {
   const { expenses, income, persons, t, locale } = useApp();

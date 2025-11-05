@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, {useMemo, useState} from 'react';
 import Card from '../components/Card.jsx';
-import { useApp } from '../context/AppContext.jsx';
-import { formatMoney } from '../utils/format.js';
-import { useNavigate } from 'react-router-dom';
-import { PieBreakdown, BarCompare } from '../components/Chart.jsx';
+import {useApp} from '../context/AppContext.jsx';
+import {formatMoney} from '../utils/format.js';
+import {useNavigate} from 'react-router-dom';
+import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import Select from '../components/Select.jsx';
 
 export default function Dashboard() {
@@ -44,14 +44,6 @@ export default function Dashboard() {
     } else {
       result = periodType === 'month' ? currentMonth : String(new Date().getFullYear());
     }
-    console.log('effectivePeriod calculation:', { 
-      periodOptionsLength: periodOptions.length, 
-      selectedPeriod, 
-      currentMonth, 
-      periodType, 
-      result,
-      firstOption: periodOptions[0]?.value 
-    });
     return result;
   }, [periodOptions, selectedPeriod, currentMonth, periodType]);
 
@@ -438,21 +430,16 @@ function getCurrentYearMonth() {
     const monthPart = parts.find((p) => p.type === 'month');
     
     if (yearPart && monthPart) {
-      const result = `${yearPart.value}-${monthPart.value}`;
-      console.log('getCurrentYearMonth - Argentina timezone:', result, 'now:', now.toString());
-      return result;
+      return `${yearPart.value}-${monthPart.value}`;
     }
   } catch (e) {
-    console.log('getCurrentYearMonth - Intl failed:', e);
     // If Intl fails, fall through to local time
   }
   
   // Fallback: use local time (should work for most users in Argentina)
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const result = `${year}-${month}`;
-  console.log('getCurrentYearMonth - fallback local:', result, 'now:', now.toString(), 'getMonth():', now.getMonth());
-  return result;
+  return `${year}-${month}`;
 }
 
 function extractYearMonth(dateStr) {
