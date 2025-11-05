@@ -176,8 +176,9 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
   };
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <PieChart>
+    <div className={onCategoryClick ? 'clickable-chart' : undefined}>
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
         <Pie 
           data={sortedData} 
           dataKey="value" 
@@ -191,16 +192,17 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
           onClick={handleCellClick}
         >
           {sortedData.map((entry, i) => (
-            <Cell 
+              <Cell 
               key={i} 
               fill={palette[i % palette.length]} 
-              style={{ cursor: onCategoryClick ? 'pointer' : 'default' }}
+                
             />
           ))}
         </Pie>
         <Tooltip content={<PieTooltip />} />
-      </PieChart>
-    </ResponsiveContainer>
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -217,8 +219,9 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
       </text>
     );
   };
+  const isClickable = Boolean(onItemClick || onIncomeClick || onExpensesClick);
   return (
-    <div className="relative" style={{ cursor: onItemClick ? 'pointer' : 'default' }}>
+    <div className={`relative ${isClickable ? 'clickable-chart' : ''}`}>
       {unitLabel && (
         <div className="absolute top-2 right-3 text-[10px] text-gray-500 dark:text-gray-400 select-none pointer-events-none">{unitLabel}</div>
       )}
@@ -227,7 +230,7 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
           if (!e) return;
           const label = e.activeLabel || (e?.activePayload && e.activePayload[0]?.payload?.name);
           if (label) onItemClick(label, e);
-        } : undefined} style={{ cursor: onItemClick ? 'pointer' : 'default' }}>
+        } : undefined}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={tickRenderer ? tickRenderer : <XTick />} interval={0} />
           <YAxis tickFormatter={formatYAxisValue} />
