@@ -7,9 +7,10 @@ import { AppProvider } from './context/AppContext.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Income from './pages/Income.jsx';
-import Analysis from './pages/Analysis.jsx';
 import Upload from './pages/Upload.jsx';
 import People from './pages/People.jsx';
+import Spreadsheet from './pages/Spreadsheet.jsx';
+import Investments from './pages/Investments.jsx';
 
 const root = createRoot(document.getElementById('root'));
 
@@ -19,13 +20,14 @@ root.render(
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}> 
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<Navigate to="/spreadsheet" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/expenses" element={<Expenses />} />
             <Route path="/income" element={<Income />} />
             <Route path="/people" element={<People />} />
-            <Route path="/analysis" element={<Analysis />} />
+            <Route path="/investments" element={<Investments />} />
             <Route path="/upload" element={<Upload />} />
+            <Route path="/spreadsheet" element={<Spreadsheet />} />
           </Route>
         </Routes>
       </BrowserRouter>

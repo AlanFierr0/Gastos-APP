@@ -4,9 +4,10 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatMoney } from '../utils/format.js';
 import { useNavigate } from 'react-router-dom';
 import { PieBreakdown, BarCompare } from '../components/Chart.jsx';
+import Select from '../components/Select.jsx';
 
 export default function Dashboard() {
-  const { expenses, income, t, locale } = useApp();
+  const { expenses, income, investmentSummary, t, locale, persons } = useApp();
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   const navigate = useNavigate();
@@ -60,10 +61,10 @@ export default function Dashboard() {
       : filterByYear(expenses, income, Number(effectivePeriod));
   }, [expenses, income, periodType, effectivePeriod]);
 
-  const monthTotals = useMemo(() => computeTotals(periodExpenses, periodIncome), [periodExpenses, periodIncome]);
+  const monthTotals = useMemo(() => computeTotals(periodExpenses, periodIncome, investmentSummary), [periodExpenses, periodIncome, investmentSummary]);
 
   const previousPeriodTotals = useMemo(() => {
-    let prevPeriod = null;
+    let prevPeriod;
     if (periodType === 'month') {
       const [y, m] = effectivePeriod.split('-').map(Number);
       const prevDate = new Date(Date.UTC(y, m - 2, 1));
@@ -75,8 +76,8 @@ export default function Dashboard() {
     const prev = periodType === 'month'
       ? filterByMonth(expenses, income, prevPeriod)
       : filterByYear(expenses, income, Number(prevPeriod));
-    return computeTotals(prev.periodExpenses, prev.periodIncome);
-  }, [periodType, effectivePeriod, expenses, income]);
+    return computeTotals(prev.periodExpenses, prev.periodIncome, investmentSummary);
+  }, [periodType, effectivePeriod, expenses, income, investmentSummary]);
 
   const trends = useMemo(() => {
     if (!previousPeriodTotals) {
@@ -118,12 +119,74 @@ export default function Dashboard() {
     return [{ name: label, income: Number(monthTotals.totalIncome || 0), expenses: Number(monthTotals.totalExpenses || 0) }];
   }, [periodOptions, effectivePeriod, monthTotals]);
 
+  // Income by person chart data - for comparison
+  const incomeByPersonData = useMemo(() => {
+    const personTotals = new Map();
+    
+    // Initialize all persons
+    persons.forEach((p) => {
+      personTotals.set(p.id, { name: p.name, income: 0 });
+    });
+    
+    // Calculate income by person
+    periodIncome.forEach((i) => {
+      if (i.personId) {
+        const current = personTotals.get(i.personId) || { name: '', income: 0 };
+        personTotals.set(i.personId, {
+          name: current.name || persons.find((p) => p.id === i.personId)?.name || '',
+          income: current.income + Number(i.amount || 0),
+        });
+      }
+    });
+    
+    // Return all persons with income, sorted by income descending
+    return Array.from(personTotals.values())
+      .filter((p) => p.income > 0)
+      .map((p) => ({ 
+        name: p.name, 
+        income: p.income,
+        expenses: 0, // Set to 0 so only income bars show
+      }))
+      .sort((a, b) => b.income - a.income);
+  }, [periodIncome, persons]);
+
+  // Expenses by person chart data - for comparison
+  const expensesByPersonData = useMemo(() => {
+    const personTotals = new Map();
+    
+    // Initialize all persons
+    persons.forEach((p) => {
+      personTotals.set(p.id, { name: p.name, expenses: 0 });
+    });
+    
+    // Calculate expenses by person
+    periodExpenses.forEach((e) => {
+      if (e.personId) {
+        const current = personTotals.get(e.personId) || { name: '', expenses: 0 };
+        personTotals.set(e.personId, {
+          name: current.name || persons.find((p) => p.id === e.personId)?.name || '',
+          expenses: current.expenses + Number(e.amount || 0),
+        });
+      }
+    });
+    
+    // Return all persons with expenses, sorted by expenses descending
+    return Array.from(personTotals.values())
+      .filter((p) => p.expenses > 0)
+      .map((p) => ({ 
+        name: p.name, 
+        income: 0, // Set to 0 so only expense bars show
+        expenses: p.expenses,
+      }))
+      .sort((a, b) => b.expenses - a.expenses);
+  }, [periodExpenses, persons]);
+
   function handleGoToIncome() {
-    navigate('/income');
+    navigate('/income', { state: { openForm: true } });
   }
 
   function handleGoToExpenses() {
-    navigate('/expenses');
+    navigate('/expenses', { state: { openForm: true } });
   }
 
   return (
@@ -146,35 +209,31 @@ export default function Dashboard() {
           >
             {t('addExpense')}
           </button>
-          <select
-            className="h-9 px-3 pr-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm appearance-none"
+          <Select
             value={periodType}
-            onChange={(e) => {
-              const v = e.target.value;
+            onChange={(v) => {
               setPeriodType(v);
               setSelectedPeriod(v === 'month' ? getCurrentYearMonth() : String(new Date().getFullYear()));
             }}
-            aria-label={t('period')}
-          >
-            <option value="month">{t('periodMonth')}</option>
-            <option value="year">{t('periodYear')}</option>
-          </select>
-          <select
-            id="period-select"
-            className="h-9 px-3 pr-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm appearance-none"
+            options={[
+              { value: 'month', label: t('periodMonth') },
+              { value: 'year', label: t('periodYear') },
+            ]}
+          />
+          <Select
             value={effectivePeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-          >
-            {periodOptions.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
+            onChange={(v) => setSelectedPeriod(v)}
+            options={periodOptions}
+          />
         </div>
       </header>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card title={t('totalIncome')}>
-          <p className="text-3xl font-bold">${monthTotals.totalIncome.toFixed(2)}</p>
+          <p className="text-3xl font-bold">
+            <span className="text-sm font-normal mr-1">ARS</span>
+            {formatMoney(monthTotals.totalIncome, 'ARS', { sign: 'none' })}
+          </p>
           {trends.income && (
             <div className={`flex items-center gap-1 mt-1 text-sm ${trends.income.positive ? 'text-green-600' : 'text-red-500'}`}>
               <span className="material-symbols-outlined text-sm">{trends.income.positive ? 'trending_up' : 'trending_down'}</span>
@@ -183,7 +242,10 @@ export default function Dashboard() {
           )}
         </Card>
         <Card title={t('totalExpenses')}>
-          <p className="text-3xl font-bold">${monthTotals.totalExpenses.toFixed(2)}</p>
+          <p className="text-3xl font-bold">
+            <span className="text-sm font-normal mr-1">ARS</span>
+            {formatMoney(monthTotals.totalExpenses, 'ARS', { sign: 'none' })}
+          </p>
           {trends.expenses && (
             <div className={`flex items-center gap-1 mt-1 text-sm ${trends.expenses.positive ? 'text-green-600' : 'text-red-500'}`}>
               <span className="material-symbols-outlined text-sm">{trends.expenses.positive ? 'trending_up' : 'trending_down'}</span>
@@ -192,7 +254,10 @@ export default function Dashboard() {
           )}
         </Card>
         <Card title={t('netBalance')}>
-          <p className="text-3xl font-bold">${monthTotals.balance.toFixed(2)}</p>
+          <p className="text-3xl font-bold">
+            <span className="text-sm font-normal mr-1">ARS</span>
+            {formatMoney(monthTotals.balance, 'ARS')}
+          </p>
           {trends.balance && (
             <div className={`flex items-center gap-1 mt-1 text-sm ${((trends.balance.change ? trends.balance.change.positive : trends.balance.positive) ? 'text-green-600' : 'text-red-500')}`}>
               {trends.balance.change ? (
@@ -221,7 +286,67 @@ export default function Dashboard() {
         </Card>
         <Card title={t('expenseBreakdown')}>
           {pieData.length ? (
-            <PieBreakdown data={pieData} />
+            <PieBreakdown 
+              data={pieData} 
+              onCategoryClick={(categoryName) => {
+                navigate('/spreadsheet', { state: { filterCategory: categoryName } });
+              }}
+            />
+          ) : (
+            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
+          )}
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card title={t('incomeByPerson')}>
+          {incomeByPersonData.length ? (
+            <BarCompare 
+              data={incomeByPersonData} 
+              showIncome={true} 
+              showExpenses={false}
+              tickRenderer={({ x, y, payload }) => {
+                const personName = String(payload?.value || '');
+                const person = persons.find(p => p.name === personName);
+                const color = person?.color || '#3b82f6';
+                const icon = person?.icon || 'person';
+                return (
+                  <foreignObject x={x - 40} y={y + 2} width="80" height="20">
+                    <div className="flex items-center justify-center gap-1" style={{ color, fontSize: '12px', lineHeight: '12px' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '14px', lineHeight: '12px' }}>{icon}</span>
+                      <span className="truncate max-w-[64px]">{personName}</span>
+                    </div>
+                  </foreignObject>
+                );
+              }}
+              tooltipLabelFromDatum
+            />
+          ) : (
+            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
+          )}
+        </Card>
+        <Card title={t('expensesByPerson')}>
+          {expensesByPersonData.length ? (
+            <BarCompare 
+              data={expensesByPersonData} 
+              showIncome={false} 
+              showExpenses={true}
+              tickRenderer={({ x, y, payload }) => {
+                const personName = String(payload?.value || '');
+                const person = persons.find(p => p.name === personName);
+                const color = person?.color || '#3b82f6';
+                const icon = person?.icon || 'person';
+                return (
+                  <foreignObject x={x - 40} y={y + 2} width="80" height="20">
+                    <div className="flex items-center justify-center gap-1" style={{ color, fontSize: '12px', lineHeight: '12px' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '14px', lineHeight: '12px' }}>{icon}</span>
+                      <span className="truncate max-w-[64px]">{personName}</span>
+                    </div>
+                  </foreignObject>
+                );
+              }}
+              tooltipLabelFromDatum
+            />
           ) : (
             <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
           )}
@@ -235,23 +360,25 @@ export default function Dashboard() {
         </div>
         <div className="flow-root">
           <ul className="divide-y divide-gray-200 dark:divide-gray-800" role="list">
-            {getRecentTransactions(periodIncome, periodExpenses, t).map((t) => (
+            {getRecentTransactions(periodIncome, periodExpenses, persons, t).map((t) => (
               <li key={t.id} className="py-3 sm:py-4">
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
-                    <div className={`flex items-center justify-center size-10 rounded-full ${t.kind === 'income' ? 'bg-green-100 dark:bg-green-900/40' : 'bg-blue-100 dark:bg-blue-900/40'}`}>
+                    <div className={`flex items-center justify-center size-10 rounded-full ${t.kind === 'income' ? 'bg-green-100 dark:bg-green-900/40' : 'bg-orange-100 dark:bg-orange-900/40'}`}>
                       <span className="material-symbols-outlined text-gray-600 dark:text-gray-300">{t.icon}</span>
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{t.title}</p>
-                    <p className="text-sm text-[#616f89] dark:text-gray-400 truncate">{t.category}</p>
+                    <p className="text-sm text-[#616f89] dark:text-gray-400 truncate">
+                      {t.personName ? `${t.category} • ${t.personName}` : t.category}
+                    </p>
                   </div>
-                  <div className={`inline-flex items-center text-base font-semibold ${t.kind === 'income' ? 'text-green-600' : 'text-red-500'}`}>{t.displayAmount}</div>
+                  <div className={`inline-flex items-center text-base font-semibold ${t.kind === 'income' ? 'text-green-600' : 'text-orange-500'}`}>{t.displayAmount}</div>
                 </div>
               </li>
             ))}
-            {getRecentTransactions(periodIncome, periodExpenses, t).length === 0 && (
+            {getRecentTransactions(periodIncome, periodExpenses, persons, t).length === 0 && (
               <li className="py-2 text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</li>
             )}
           </ul>
@@ -261,14 +388,21 @@ export default function Dashboard() {
   );
 }
 
-function getRecentTransactions(income = [], expenses = [], t) {
+function getRecentTransactions(income = [], expenses = [], persons = [], t) {
+  const getPersonName = (personId) => {
+    if (!personId) return null;
+    const person = persons.find((p) => p.id === personId);
+    return person ? person.name : null;
+  };
+
   const incomeItems = income.map((i) => ({
     id: `i-${i.id ?? Math.random()}`,
     kind: 'income',
     title: i.source || t('incomeGeneric'),
     category: t('incomeGeneric'),
+    personName: getPersonName(i.personId),
     amount: Number(String(i.amount || 0).toString().replace(/[^0-9.-]/g, '')),
-    displayAmount: formatMoney(i.amount || 0, i.currency || 'USD', { sign: 'always' }),
+    displayAmount: formatMoney(i.amount || 0, i.currency || 'ARS', { sign: 'always' }),
     date: new Date(i.date || 0).getTime() || 0,
     icon: 'work',
   }));
@@ -277,8 +411,9 @@ function getRecentTransactions(income = [], expenses = [], t) {
     kind: 'expense',
     title: e.notes || t('expenseGeneric'),
     category: (typeof e.category === 'object' && e.category) ? (e.category.name || t('expenseGeneric')) : (e.category || t('expenseGeneric')),
+    personName: getPersonName(e.personId),
     amount: -Number(String(e.amount || 0).toString().replace(/[^0-9.-]/g, '')),
-    displayAmount: '-' + formatMoney(e.amount || 0, e.currency || 'USD', { sign: 'none' }),
+    displayAmount: '-' + formatMoney(e.amount || 0, e.currency || 'ARS', { sign: 'none' }),
     date: new Date(e.date || 0).getTime() || 0,
     icon: 'shopping_cart',
   }));
@@ -353,7 +488,10 @@ function buildFullYearMonths(year, locale) {
   for (let m = 1; m <= 12; m += 1) {
     // Use a mid-month UTC date and fixed timezone to avoid month shifting by TZ
     const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
-    const label = new Intl.DateTimeFormat(locale || undefined, { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' }).format(date) + ` ${year}`;
+    const monthName = new Intl.DateTimeFormat(locale || undefined, { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    // Capitalize first letter
+    const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    const label = `${capitalizedMonth} ${year}`;
     arr.push({ value: `${year}-${String(m).padStart(2, '0')}`, label });
   }
   // order descending to match previous behavior
@@ -382,8 +520,23 @@ function filterByMonth(expenses = [], income = [], yearMonth) {
     const ym = extractYearMonth(ts);
     return ym && ym.year === y && ym.month === m;
   };
-  const periodIncome = income.filter((i) => inMonth(i.date));
+  
+  // Filter expenses: only those in the specific month
   const periodExpenses = expenses.filter((e) => inMonth(e.date));
+  
+  // Filter income: include both regular income in the month AND recurring income that started before or in this month
+  const periodIncome = income.filter((i) => {
+    // If it's recurring income, include it if it started on or before this month
+    if (i.isRecurring) {
+      const incomeYm = extractYearMonth(i.date);
+      if (!incomeYm) return false;
+      // Include if the recurring income started in this month or earlier
+      return (incomeYm.year < y) || (incomeYm.year === y && incomeYm.month <= m);
+    }
+    // For non-recurring income, only include if it's in this month
+    return inMonth(i.date);
+  });
+  
   return { periodIncome, periodExpenses };
 }
 
@@ -392,18 +545,35 @@ function filterByYear(expenses = [], income = [], year) {
     const ym = extractYearMonth(ts);
     return ym && ym.year === year;
   };
-  const periodIncome = income.filter((i) => inYear(i.date));
+  
+  // Filter expenses: only those in the specific year
   const periodExpenses = expenses.filter((e) => inYear(e.date));
+  
+  // Filter income: include both regular income in the year AND recurring income that started before or in this year
+  const periodIncome = income.filter((i) => {
+    // If it's recurring income, include it if it started in this year or earlier
+    if (i.isRecurring) {
+      const incomeYm = extractYearMonth(i.date);
+      if (!incomeYm) return false;
+      return incomeYm.year <= year;
+    }
+    // For non-recurring income, only include if it's in this year
+    return inYear(i.date);
+  });
+  
   return { periodIncome, periodExpenses };
 }
 
-function computeTotals(expenses = [], income = []) {
+function computeTotals(expenses = [], income = [], investmentSummary = null) {
   const totalExpenses = expenses.reduce((acc, r) => acc + Number(r.amount || 0), 0);
   const totalIncome = income.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  // Add investment profit as income (only profit, not total value)
+  const investmentProfit = investmentSummary ? (Number(investmentSummary.profit || 0)) : 0;
+  const totalIncomeWithInvestments = totalIncome + investmentProfit;
   return {
     totalExpenses,
-    totalIncome,
-    balance: totalIncome - totalExpenses,
+    totalIncome: totalIncomeWithInvestments,
+    balance: totalIncomeWithInvestments - totalExpenses,
   };
 }
 

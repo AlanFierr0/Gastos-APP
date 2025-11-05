@@ -19,6 +19,8 @@
 # misc
 .DS_Store
 *.pem
+*.xml
+.idea/
 
 # debug
 npm-debug.log*

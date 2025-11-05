@@ -1,6 +1,10 @@
-export function formatMoney(amount, currency = 'USD', { sign = 'auto' } = {}) {
+export function formatMoney(amount, currency = 'ARS', { sign = 'auto' } = {}) {
   const num = Number(amount || 0);
-  const formatter = new Intl.NumberFormat(undefined, {
+  
+  // Use locale-specific formatting for ARS to ensure comma separators
+  const locale = currency === 'ARS' ? 'es-AR' : undefined;
+  
+  const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,

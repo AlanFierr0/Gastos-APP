@@ -14,8 +14,12 @@ const linkClass = ({ isActive }) =>
 export default function Sidebar() {
   const { t } = useApp();
   return (
-    <aside className="w-64 shrink-0 border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-background-dark">
-      <nav className="flex flex-col gap-2">
+    <aside className="w-64 shrink-0 border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-background-dark sticky top-0 h-screen overflow-y-auto">
+      <nav className="flex flex-col gap-2 p-4">
+        <NavLink className={linkClass} to="/spreadsheet">
+          <span className="material-symbols-outlined">table_chart</span>
+          <span className="text-sm font-medium">{t('spreadsheet')}</span>
+        </NavLink>
         <NavLink className={linkClass} to="/dashboard">
           <span className="material-symbols-outlined">dashboard</span>
           <span className="text-sm font-medium">{t('dashboard')}</span>
@@ -32,9 +36,9 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">group</span>
           <span className="text-sm font-medium">{t('people')}</span>
         </NavLink>
-        <NavLink className={linkClass} to="/analysis">
-          <span className="material-symbols-outlined">pie_chart</span>
-          <span className="text-sm font-medium">{t('analysis')}</span>
+        <NavLink className={linkClass} to="/investments">
+          <span className="material-symbols-outlined">trending_up</span>
+          <span className="text-sm font-medium">{t('investments')}</span>
         </NavLink>
         <NavLink className={linkClass} to="/upload">
           <span className="material-symbols-outlined">file_upload</span>

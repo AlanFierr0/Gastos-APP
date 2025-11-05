@@ -1,18 +1,28 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Table from '../components/Table.jsx';
 import Card from '../components/Card.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { useForm } from 'react-hook-form';
 import { formatDate, formatMoney } from '../utils/format.js';
+import { useLocation } from 'react-router-dom';
 
 export default function Income() {
   const { income, t, addIncome, updateIncome, removeIncome, persons, categories } = useApp();
+  const location = useLocation();
   const [query, setQuery] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(location.state?.openForm || false);
   const { register, handleSubmit, reset, setValue } = useForm();
   const [editingId, setEditingId] = useState(null);
   const [catQuery, setCatQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Clear navigation state after opening form
+  useEffect(() => {
+    if (location.state?.openForm) {
+      // Clear the state to prevent reopening on back navigation
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const incomeCategories = useMemo(() => {
     return (categories || []).filter((c) => String(c?.type?.name || '').toLowerCase() === 'income');
@@ -31,8 +41,10 @@ export default function Income() {
 
   const columns = [
     { key: 'categoryName', header: 'Category' },
+    { key: 'person', header: t('person') },
     { key: 'amount', header: 'Amount' },
     { key: 'date', header: 'Date' },
+    { key: 'type', header: t('incomeType') },
   ];
 
   const suggestions = useMemo(() => {
@@ -48,9 +60,10 @@ export default function Income() {
       source: String(values.source || '').trim().toLowerCase(),
       categoryName: String(values.categoryName || '').trim().toLowerCase(),
       amount: Number(values.amount),
-      currency: values.currency || 'USD',
+      currency: values.currency || 'ARS',
       date: values.date,
       personId: values.personId,
+      isRecurring: values.isRecurring === true || values.isRecurring === 'true',
     };
     if (editingId) {
       await updateIncome(editingId, payload);
@@ -99,9 +112,10 @@ export default function Income() {
     setValue('categoryName', catName);
     setValue('source', catName);
     setValue('amount', row.rawAmount ?? row.amount);
-    setValue('currency', row.currency || 'USD');
+    setValue('currency', row.currency || 'ARS');
     setValue('date', (row.rawDate || row.date || '').slice(0, 10));
     setValue('personId', row.personId || '');
+    setValue('isRecurring', row.isRecurring ? 'true' : 'false');
   }
 
   return (
@@ -111,7 +125,7 @@ export default function Income() {
           <p className="text-4xl font-black tracking-[-0.033em]">{t('familyIncome')}</p>
           <p className="text-[#616f89] dark:text-gray-400">{t('familyIncomeSub')}</p>
         </div>
-        <button onClick={() => { setShowForm((s) => !s); if (!showForm) { setEditingId(null); reset(); } }} className="h-10 px-4 rounded-lg bg-primary text-white text-sm font-bold">{showForm ? 'Close' : t('addIncome')}</button>
+        <button onClick={() => { if (showForm) { setShowForm(false); } else { setShowForm(true); setEditingId(null); reset(); } }} className="h-10 px-4 rounded-lg bg-primary text-white text-sm font-bold">{showForm ? 'Close' : t('addIncome')}</button>
       </div>
 
       <Card>
@@ -140,9 +154,9 @@ export default function Income() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm text-[#616f89]">Currency</label>
-              <select {...register('currency')} className="form-select rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
-                <option value="USD">USD</option>
+              <select {...register('currency')} className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" defaultValue="ARS">
                 <option value="ARS">ARS</option>
+                <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
                 <option value="BRL">BRL</option>
                 <option value="MXN">MXN</option>
@@ -159,11 +173,18 @@ export default function Income() {
             </div>
             <div className="flex flex-col gap-1 md:col-span-4">
               <label className="text-sm text-[#616f89]">Person</label>
-              <select {...register('personId', { required: true })} className="form-select rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
+              <select {...register('personId', { required: true })} className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
                 <option value="">Select a person</option>
                 {persons.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1 md:col-span-4">
+              <label className="text-sm text-[#616f89]">{t('incomeType')}</label>
+              <select {...register('isRecurring')} className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
+                <option value="false">{t('extraordinaryIncome')}</option>
+                <option value="true">{t('recurringIncome')}</option>
               </select>
             </div>
             <div className="md:col-span-4 flex justify-end">
@@ -179,15 +200,17 @@ export default function Income() {
           rows={rows.map((r) => ({
             id: r.id,
             categoryName: r.category?.name ?? r.source ?? '',
-            amount: formatMoney(r.rawAmount ?? r.amount, r.currency || 'USD'),
+            person: r.person?.name || '',
+            amount: formatMoney(r.rawAmount ?? r.amount, r.currency || 'ARS'),
             date: r.date,
+            type: r.isRecurring ? t('recurringIncome') : t('extraordinaryIncome'),
             currency: r.currency,
-            person: r.person,
             personId: r.personId,
             category: r.category,
             source: r.source,
             rawAmount: r.rawAmount,
             rawDate: r.rawDate,
+            isRecurring: r.isRecurring,
           }))}
           onDelete={handleDelete}
           onEdit={handleEdit}

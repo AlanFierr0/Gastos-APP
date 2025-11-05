@@ -14,6 +14,116 @@ body {
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
 }
 
+/* Fix for Recharts tooltips and hover elements in dark mode */
+.dark .recharts-tooltip-wrapper,
+.dark .recharts-tooltip-cursor,
+.dark .recharts-active-dot,
+.dark .recharts-tooltip-wrapper .recharts-tooltip-content,
+.dark .recharts-tooltip-content-wrapper,
+.dark .recharts-tooltip-content {
+  background-color: rgb(31 41 55) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark .recharts-tooltip-wrapper *,
+.dark .recharts-tooltip-content *,
+.dark .recharts-tooltip-content-wrapper * {
+  background-color: transparent !important;
+}
+
+/* Apply white text color to paragraphs and other elements, but not spans with inline color */
+.dark .recharts-tooltip-wrapper p,
+.dark .recharts-tooltip-content p,
+.dark .recharts-tooltip-wrapper div,
+.dark .recharts-tooltip-content div {
+  color: rgb(243 244 246) !important;
+}
+
+/* Don't override color on category name spans - let inline styles work */
+/* Using unset to remove any inherited color and allow inline styles to work */
+.dark .recharts-tooltip-wrapper p span.category-name,
+.dark .recharts-tooltip-content p span.category-name {
+  color: unset;
+}
+
+.dark .recharts-tooltip-wrapper div,
+.dark .recharts-tooltip-content div,
+.dark .recharts-tooltip-content-wrapper div {
+  background-color: rgb(31 41 55) !important;
+}
+
+/* Ensure hover states don't use white background in dark mode */
+.dark tr:hover {
+  background-color: rgb(55 65 81 / 0.5) !important;
+}
+
+/* Fix for Recharts bar hover in dark mode */
+.dark .recharts-bar-rectangle:hover {
+  opacity: 0.8 !important;
+}
+
+.dark .recharts-surface {
+  background-color: transparent !important;
+}
+
+.dark .recharts-wrapper {
+  background-color: transparent !important;
+}
+
+/* Fix for all Recharts elements to prevent white background on hover */
+.dark .recharts-wrapper *,
+.dark .recharts-surface *,
+.dark .recharts-bar *,
+.dark .recharts-line *,
+.dark .recharts-area *,
+.dark .recharts-cartesian-axis *,
+.dark .recharts-cartesian-grid * {
+  background-color: transparent !important;
+}
+
+/* Specific fix for tooltip content wrapper */
+.dark .recharts-default-tooltip {
+  background-color: rgb(31 41 55) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark .recharts-default-tooltip * {
+  background-color: rgb(31 41 55) !important;
+}
+
+.dark .recharts-default-tooltip p,
+.dark .recharts-default-tooltip div {
+  color: rgb(243 244 246) !important;
+}
+
+/* Don't override color on category name spans */
+.dark .recharts-default-tooltip p span.category-name {
+  color: unset;
+}
+
+/* Select dropdown styling - rounded corners consistent with app design */
+select.form-select {
+  border-radius: 0.75rem !important;
+  padding-right: 2.5rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E") !important;
+  background-position: right 0.5rem center !important;
+  background-repeat: no-repeat !important;
+  background-size: 1.5em 1.5em !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+}
+
+.dark select.form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E") !important;
+}
+
+/* Select focus state */
+select.form-select:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px #135bec !important;
+}
+
 
 
 

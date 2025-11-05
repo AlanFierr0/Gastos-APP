@@ -7,8 +7,11 @@ const AppContext = createContext(null);
 export function AppProvider({ children }) {
   const [expenses, setExpenses] = useState([]);
   const [income, setIncome] = useState([]);
+  const [investments, setInvestments] = useState([]);
+  const [investmentSummary, setInvestmentSummary] = useState(null);
   const [persons, setPersons] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [exchangeRates, setExchangeRates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [locale, setLocale] = useState('es');
@@ -26,11 +29,22 @@ export function AppProvider({ children }) {
     (async () => {
       try {
         setLoading(true);
-        const [e, i, p, c] = await Promise.allSettled([api.getExpenses(), api.getIncome(), api.getPersons(), api.getCategories()]);
+        const [e, i, inv, invSum, p, c, ex] = await Promise.allSettled([
+          api.getExpenses(), 
+          api.getIncome(), 
+          api.getInvestments(),
+          api.getInvestmentSummary(),
+          api.getPersons(), 
+          api.getCategories(),
+          api.getExchangeRates()
+        ]);
         if (e.status === 'fulfilled') setExpenses(e.value);
         if (i.status === 'fulfilled') setIncome(i.value);
+        if (inv.status === 'fulfilled') setInvestments(inv.value);
+        if (invSum.status === 'fulfilled') setInvestmentSummary(invSum.value);
         if (p.status === 'fulfilled') setPersons(p.value);
         if (c.status === 'fulfilled') setCategories(c.value);
+        if (ex.status === 'fulfilled') setExchangeRates(ex.value);
       } catch (err) {
         setError(err);
       } finally {
@@ -86,12 +100,18 @@ export function AppProvider({ children }) {
   const value = {
     expenses,
     income,
+    investments,
+    investmentSummary,
     persons,
     categories,
+    exchangeRates,
     setExpenses,
     setIncome,
+    setInvestments,
+    setInvestmentSummary,
     setPersons,
     setCategories,
+    setExchangeRates,
     loading,
     error,
     totals,
@@ -115,10 +135,17 @@ export function AppProvider({ children }) {
         }
       } catch {}
     },
-    updatePerson(id, name) {
+    async updatePerson(id, name, icon, color) {
       const trimmed = String(name || '').trim();
       if (!trimmed) return;
-      setPersons((prev) => prev.map((p) => (p.id === id ? { ...p, name: trimmed } : p)));
+      const optimistic = { name: trimmed, icon: icon || undefined, color: color || undefined };
+      setPersons((prev) => prev.map((p) => (p.id === id ? { ...p, ...optimistic } : p)));
+      try {
+        const saved = await api.updatePerson(id, { name: trimmed, icon: icon || undefined, color: color || undefined });
+        if (saved && saved.id) {
+          setPersons((prev) => prev.map((p) => (p.id === id ? saved : p)));
+        }
+      } catch {}
     },
     removePerson(id) {
       setPersons((prev) => prev.filter((p) => p.id !== id));
@@ -211,6 +238,81 @@ export function AppProvider({ children }) {
     async removeExpense(id) {
       setExpenses((prev) => prev.filter((e) => e.id !== id));
       try { await api.deleteExpense(id); } catch {}
+    },
+    async refreshExpenses() {
+      try {
+        const data = await api.getExpenses();
+        setExpenses(data || []);
+      } catch {}
+    },
+    async refreshIncome() {
+      try {
+        const data = await api.getIncome();
+        setIncome(data || []);
+      } catch {}
+    },
+    async refreshPersons() {
+      try {
+        const data = await api.getPersons();
+        setPersons(data || []);
+      } catch {}
+    },
+    async refreshExchangeRates() {
+      try {
+        const data = await api.getExchangeRates();
+        setExchangeRates(data || []);
+      } catch {}
+    },
+    async addInvestment(newInvestment) {
+      const optimistic = {
+        id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
+        ...newInvestment,
+        person: personNameById(newInvestment.personId) || newInvestment.person,
+      };
+      setInvestments((prev) => [optimistic, ...prev]);
+      try {
+        const saved = await api.createInvestment(newInvestment);
+        if (saved && saved.id) {
+          setInvestments((prev) => [saved, ...prev.filter((inv) => inv.id !== optimistic.id)]);
+          // Refresh summary
+          const summary = await api.getInvestmentSummary();
+          setInvestmentSummary(summary);
+        }
+      } catch {
+        // keep optimistic if backend not available
+      }
+    },
+    async updateInvestment(id, updates) {
+      const optimistic = { ...updates, id };
+      setInvestments((prev) => prev.map((inv) => (inv.id === id ? { ...inv, ...optimistic, person: personNameById(updates.personId) || inv.person } : inv)));
+      try {
+        const saved = await api.updateInvestment(id, updates);
+        if (saved && saved.id) {
+          setInvestments((prev) => prev.map((inv) => (inv.id === id ? saved : inv)));
+          // Refresh summary
+          const summary = await api.getInvestmentSummary();
+          setInvestmentSummary(summary);
+        }
+      } catch {}
+    },
+    async removeInvestment(id) {
+      setInvestments((prev) => prev.filter((inv) => inv.id !== id));
+      try { 
+        await api.deleteInvestment(id);
+        // Refresh summary
+        const summary = await api.getInvestmentSummary();
+        setInvestmentSummary(summary);
+      } catch {}
+    },
+    async refreshInvestments() {
+      try {
+        const [data, summary] = await Promise.all([
+          api.getInvestments(),
+          api.getInvestmentSummary(),
+        ]);
+        setInvestments(data || []);
+        setInvestmentSummary(summary);
+      } catch {}
     },
   };
 
