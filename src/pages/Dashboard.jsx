@@ -312,6 +312,11 @@ export default function Dashboard() {
                 );
               }}
               tooltipLabelFromDatum
+              onItemClick={(label) => {
+                const person = persons.find(p => p.name === String(label));
+                if (!person) return;
+                navigate('/income', { state: { filterPersonId: person.id, periodType, selectedPeriod: effectivePeriod } });
+              }}
             />
           ) : (
             <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
@@ -338,6 +343,11 @@ export default function Dashboard() {
                 );
               }}
               tooltipLabelFromDatum
+              onItemClick={(label) => {
+                const person = persons.find(p => p.name === String(label));
+                if (!person) return;
+                navigate('/expenses', { state: { filterPersonId: person.id, periodType, selectedPeriod: effectivePeriod } });
+              }}
             />
           ) : (
             <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
@@ -475,10 +485,10 @@ function buildFullYearMonths(year, locale) {
   for (let m = 1; m <= 12; m += 1) {
     // Use a mid-month UTC date and fixed timezone to avoid month shifting by TZ
     const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
-    const monthName = new Intl.DateTimeFormat(locale || undefined, { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
-    // Capitalize first letter
-    const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-    const label = `${capitalizedMonth} ${year}`;
+    const raw = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    const three = raw.replace('.', '').slice(0, 3);
+    const monthAbbr = three.charAt(0).toUpperCase() + three.slice(1);
+    const label = `${monthAbbr} ${year}`;
     arr.push({ value: `${year}-${String(m).padStart(2, '0')}`, label });
   }
   // order descending to match previous behavior

@@ -3,9 +3,11 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatMoney } from '../utils/format.js';
 import Card from '../components/Card.jsx';
 import { PieBreakdown, BarCompare } from '../components/Chart.jsx';
+import { useNavigate } from 'react-router-dom';
 
 export default function People() {
   const { persons, addPerson, updatePerson, removePerson, income, expenses, t, locale } = useApp();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [formError, setFormError] = useState('');
   const [selectedPersonId, setSelectedPersonId] = useState('');
@@ -193,14 +195,23 @@ export default function People() {
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card title={t('incomeVsExpenses')} className="lg:col-span-2">
               {barData.length && (barData[0].income > 0 || barData[0].expenses > 0) ? (
-                <BarCompare data={barData} />
+                <BarCompare 
+                  data={barData} 
+                  onIncomeClick={() => navigate('/income', { state: { periodType, selectedPeriod: effectivePeriod, filterPersonId: selectedPersonId } })}
+                  onExpensesClick={() => navigate('/expenses', { state: { periodType, selectedPeriod: effectivePeriod, filterPersonId: selectedPersonId } })}
+                />
               ) : (
                 <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
               )}
             </Card>
             <Card title={t('expenseBreakdown')}>
               {pieData.length ? (
-                <PieBreakdown data={pieData} />
+                <PieBreakdown 
+                  data={pieData} 
+                  onCategoryClick={(categoryName) => {
+                    navigate('/expenses', { state: { filterPersonId: selectedPersonId, periodType, selectedPeriod, filterCategoryName: categoryName } });
+                  }}
+                />
               ) : (
                 <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
               )}
@@ -488,10 +499,10 @@ function buildFullYearMonths(year, locale) {
   const arr = [];
   for (let m = 1; m <= 12; m += 1) {
     const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
-    const monthName = new Intl.DateTimeFormat(locale || undefined, { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
-    // Capitalize first letter
-    const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-    const label = `${capitalizedMonth} ${year}`;
+    const raw = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    const three = raw.replace('.', '').slice(0, 3);
+    const monthAbbr = three.charAt(0).toUpperCase() + three.slice(1);
+    const label = `${monthAbbr} ${year}`;
     arr.push({ value: `${year}-${String(m).padStart(2, '0')}`, label });
   }
   return arr.sort((a, b) => (a.value < b.value ? 1 : -1));

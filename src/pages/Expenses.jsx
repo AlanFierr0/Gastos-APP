@@ -8,10 +8,13 @@ import { formatDate } from '../utils/format.js';
 import { useLocation } from 'react-router-dom';
 
 export default function Expenses() {
-  const { expenses, addExpense, updateExpense, removeExpense, t, persons, categories } = useApp();
+  const { expenses, addExpense, updateExpense, removeExpense, t, persons, categories, locale } = useApp();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [personFilter, setPersonFilter] = useState('');
+  const [periodType, setPeriodType] = useState('all'); // all | month | year
+  const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   const [showForm, setShowForm] = useState(location.state?.openForm || false);
   const { register, handleSubmit, reset, setValue } = useForm();
   const [catQuery, setCatQuery] = useState('');
@@ -24,27 +27,67 @@ export default function Expenses() {
       // Clear the state to prevent reopening on back navigation
       window.history.replaceState({}, document.title);
     }
+    // Apply incoming filters (from Dashboard or elsewhere)
+    if (location.state?.filterPersonId) {
+      setPersonFilter(location.state.filterPersonId);
+    }
+    if (location.state?.periodType) {
+      setPeriodType(location.state.periodType);
+    }
+    if (location.state?.selectedPeriod) {
+      setSelectedPeriod(location.state.selectedPeriod);
+    }
+    if (location.state?.filterCategoryId) {
+      setCategoryFilter(location.state.filterCategoryId);
+    }
+    if (location.state?.filterCategoryName && !location.state?.filterCategoryId) {
+      const cat = (categories || []).find(c => String(c?.type?.name || '').toLowerCase() === 'expense' && c.name === location.state.filterCategoryName);
+      if (cat?.id) setCategoryFilter(cat.id);
+    }
   }, [location.state]);
 
   const expenseCategories = useMemo(() => {
     return (categories || []).filter((c) => String(c?.type?.name || '').toLowerCase() === 'expense');
   }, [categories]);
 
+  const personMap = useMemo(() => {
+    const map = new Map();
+    (persons || []).forEach(p => map.set(p.id, p));
+    return map;
+  }, [persons]);
+
+  // Period options
+  const selectedYear = useMemo(() => {
+    const [yStr] = String(selectedPeriod || '').split('-');
+    return Number(yStr) || new Date().getFullYear();
+  }, [selectedPeriod]);
+  const months = useMemo(() => buildFullYearMonths(selectedYear, locale), [selectedYear, locale]);
+  const years = useMemo(() => buildAvailableYears(expenses || [], []), [expenses]);
+  const periodOptions = periodType === 'month' ? months : years;
+
+  // Filter by period first
+  const periodExpenses = useMemo(() => {
+    if (periodType === 'all') return expenses || [];
+    if (periodType === 'month') return filterByMonth(expenses || [], [], selectedPeriod).periodExpenses;
+    return filterByYear(expenses || [], [], Number(selectedPeriod)).periodExpenses;
+  }, [expenses, periodType, selectedPeriod]);
+
   const filtered = useMemo(() => {
-    return (expenses || []).filter((r) => {
+    return (periodExpenses || []).filter((r) => {
       const q = query.toLowerCase();
       const matchesQ = !q || String(r.notes || '').toLowerCase().includes(q);
       const matchesC = !categoryFilter || r.category?.id === categoryFilter;
-      return matchesQ && matchesC;
+      const matchesP = !personFilter || r.personId === personFilter;
+      return matchesQ && matchesC && matchesP;
     });
-  }, [expenses, query, categoryFilter]);
+  }, [periodExpenses, query, categoryFilter, personFilter]);
 
   const columns = [
-    { key: 'categoryName', header: 'Category' },
+    { key: 'date', header: t('date') },
+    { key: 'categoryName', header: t('category') },
     { key: 'person', header: t('person') },
-    { key: 'amount', header: 'Amount' },
-    { key: 'date', header: 'Date' },
-    { key: 'notes', header: 'Notes' },
+    { key: 'amount', header: t('amount') },
+    { key: 'notes', header: t('notes') },
   ];
 
   const onSubmit = async (values) => {
@@ -125,7 +168,7 @@ export default function Expenses() {
       </div>
 
       <Card>
-        <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex flex-col md:flex-row gap-3 items-center">
           <input className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder={t('searchInNotes')} value={query} onChange={(e) => setQuery(e.target.value)} />
           <select className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             <option value="">{t('allOption')}</option>
@@ -133,6 +176,40 @@ export default function Expenses() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+          <select className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}>
+            <option value="">{t('allOption')}</option>
+            {persons.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2 ml-auto">
+            <label className="text-sm text-[#616f89] dark:text-gray-400">{t('period')}:</label>
+            <select
+              className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary"
+              value={periodType}
+              onChange={(e) => {
+                const v = e.target.value;
+                setPeriodType(v);
+                if (v === 'month') setSelectedPeriod(getCurrentYearMonth());
+                else if (v === 'year') setSelectedPeriod(String(new Date().getFullYear()));
+              }}
+            >
+              <option value="all">{t('allOption')}</option>
+              <option value="month">{t('periodMonth')}</option>
+              <option value="year">{t('periodYear')}</option>
+            </select>
+            {periodType !== 'all' && (
+              <select
+                className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary"
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+              >
+                {periodOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -198,19 +275,65 @@ export default function Expenses() {
       {filtered.length ? (
         <Table
           columns={columns}
-          rows={filtered.map((r) => ({
-            id: r.id,
-            categoryName: r.category?.name ?? '',
-            person: r.person?.name || '',
-            amount: formatMoney(r.amount, r.currency || 'ARS'),
-            date: formatDate(r.date),
-            notes: r.notes,
-            currency: r.currency,
-            personId: r.personId,
-            category: r.category,
-            rawAmount: r.amount,
-            rawDate: typeof r.date === 'string' ? r.date : new Date(r.date).toISOString(),
-          }))}
+          rows={filtered.map((r) => {
+            const ym = extractYearMonth(r.date);
+            const monthLabel = ym ? formatMonthYear(new Date(Date.UTC(ym.year, ym.month - 1, 15))) : formatDate(r.date);
+            const personObj = personMap.get(r.personId);
+            const personColor = personObj?.color || '#3b82f6';
+            const personIcon = personObj?.icon || 'person';
+            const categoryName = r.category?.name ?? '';
+            return {
+              id: r.id,
+              date: (
+                <button
+                  type="button"
+                  className="hover:underline hover:text-primary"
+                  title={`${t('filterBy')} ${monthLabel}`}
+                  onClick={() => {
+                    setPeriodType('month');
+                    if (ym) setSelectedPeriod(`${ym.year}-${String(ym.month).padStart(2, '0')}`);
+                  }}
+                >
+                  {monthLabel}
+                </button>
+              ),
+              categoryName: (
+                <div className="flex items-center gap-2">
+                  {categoryName ? (
+                    <button
+                      onClick={() => setCategoryFilter(categoryFilter === r.category?.id ? '' : (r.category?.id || ''))}
+                      className={`inline-block w-3 h-3 rounded-full flex-shrink-0 transition-all hover:scale-125 cursor-pointer ${categoryFilter === r.category?.id ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                      style={{ backgroundColor: getCategoryColor(categoryName) }}
+                      title={`${t('filterBy')} ${categoryName}`}
+                    />
+                  ) : (
+                    <span className="inline-block w-3 h-3 rounded-full bg-gray-400" />
+                  )}
+                  <span>{categoryName || '-'}</span>
+                </div>
+              ),
+              person: (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPersonFilter(personFilter === r.personId ? '' : (r.personId || ''))}
+                    className={`material-symbols-outlined text-lg transition-all hover:scale-110 cursor-pointer ${personFilter === r.personId ? 'ring-2 ring-primary ring-offset-1 rounded' : ''}`}
+                    style={{ color: personColor }}
+                    title={`${t('filterBy')} ${r.person?.name || ''}`}
+                  >
+                    {personIcon}
+                  </button>
+                  <span>{r.person?.name || '-'}</span>
+                </div>
+              ),
+              amount: formatMoney(r.amount, r.currency || 'ARS'),
+              notes: r.notes,
+              currency: r.currency,
+              personId: r.personId,
+              category: r.category,
+              rawAmount: r.amount,
+              rawDate: typeof r.date === 'string' ? r.date : new Date(r.date).toISOString(),
+            };
+          })}
           onDelete={handleDelete}
           onEdit={handleEdit}
         />
@@ -221,6 +344,103 @@ export default function Expenses() {
       )}
     </div>
   );
+}
+
+// Helpers from Spreadsheet.jsx (trimmed for expenses only)
+function getCurrentYearMonth() {
+  const now = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit' });
+    const parts = formatter.formatToParts(now);
+    const y = parts.find((p) => p.type === 'year');
+    const m = parts.find((p) => p.type === 'month');
+    if (y && m) return `${y.value}-${m.value}`;
+  } catch {}
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function extractYearMonth(dateStr) {
+  if (!dateStr) return null;
+  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
+  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return { year: Number(m[1]), month: Number(m[2]) };
+  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return { year: Number(m[3]), month: Number(m[2]) };
+  const d = new Date(str);
+  if (Number.isNaN(d.getTime())) return null;
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+}
+
+function buildFullYearMonths(year, locale) {
+  const arr = [];
+  for (let m = 1; m <= 12; m += 1) {
+    const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
+    const raw = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    const three = raw.replace('.', '').slice(0, 3);
+    const monthAbbr = three.charAt(0).toUpperCase() + three.slice(1);
+    const label = `${monthAbbr} ${year}`;
+    arr.push({ value: `${year}-${String(m).padStart(2, '0')}`, label });
+  }
+  return arr.sort((a, b) => (a.value < b.value ? 1 : -1));
+}
+
+function buildAvailableYears(expenses = []) {
+  const set = new Set();
+  const add = (ts) => {
+    const ym = extractYearMonth(ts);
+    if (ym) set.add(String(ym.year));
+  };
+  expenses.forEach((e) => add(e.date));
+  if (set.size === 0) set.add(String(new Date().getFullYear()));
+  const values = Array.from(set).sort((a, b) => (a < b ? 1 : -1));
+  return values.map((v) => ({ value: v, label: v }));
+}
+
+function filterByMonth(expenses = [], _income = [], yearMonth) {
+  const [yStr, mStr] = (yearMonth || '').split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const inMonth = (ts) => {
+    const ym = extractYearMonth(ts);
+    return ym && ym.year === y && ym.month === m;
+  };
+  return { periodExpenses: expenses.filter((e) => inMonth(e.date)) };
+}
+
+function filterByYear(expenses = [], _income = [], year) {
+  const inYear = (ts) => {
+    const ym = extractYearMonth(ts);
+    return ym && ym.year === year;
+  };
+  return { periodExpenses: expenses.filter((e) => inYear(e.date)) };
+}
+
+function formatMonthYear(value) {
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value || '');
+    const mf = new Intl.DateTimeFormat('es-AR', { month: 'short', year: 'numeric' });
+    const out = mf.format(d).replace('.', '');
+    return out.charAt(0).toUpperCase() + out.slice(1);
+  } catch {
+    return String(value || '');
+  }
+}
+
+function getCategoryColor(categoryName) {
+  if (!categoryName) return '#9ca3af';
+  let hash = 0;
+  for (let i = 0; i < categoryName.length; i++) {
+    hash = categoryName.charCodeAt(i) + ((hash << 5) - hash);
+    hash = hash & hash;
+  }
+  const goldenAngle = 137.508;
+  const hue = (Math.abs(hash) * goldenAngle) % 360;
+  const saturation = 55 + (Math.abs(hash) % 35);
+  const lightness = 45 + (Math.abs(hash >> 8) % 20);
+  return `hsl(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`;
 }
 
 

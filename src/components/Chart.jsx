@@ -204,7 +204,7 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
   );
 }
 
-export function BarCompare({ data, showIncome = true, showExpenses = true, unitLabel = 'ARS', tickIncomeLabel = 'Income', tickExpenseLabel = 'Expense', tickRenderer = null, tooltipLabelFromDatum = false }) {
+export function BarCompare({ data, showIncome = true, showExpenses = true, unitLabel = 'ARS', tickIncomeLabel = 'Income', tickExpenseLabel = 'Expense', tickRenderer = null, tooltipLabelFromDatum = false, onItemClick = null, onIncomeClick = null, onExpensesClick = null }) {
   const XTick = (props) => {
     const { x, y, payload } = props;
     const value = String(payload?.value || '');
@@ -218,12 +218,16 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
     );
   };
   return (
-    <div className="relative">
+    <div className="relative" style={{ cursor: onItemClick ? 'pointer' : 'default' }}>
       {unitLabel && (
         <div className="absolute top-2 right-3 text-[10px] text-gray-500 dark:text-gray-400 select-none pointer-events-none">{unitLabel}</div>
       )}
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+        <BarChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 8 }} onClick={onItemClick ? (e) => {
+          if (!e) return;
+          const label = e.activeLabel || (e?.activePayload && e.activePayload[0]?.payload?.name);
+          if (label) onItemClick(label, e);
+        } : undefined} style={{ cursor: onItemClick ? 'pointer' : 'default' }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={tickRenderer ? tickRenderer : <XTick />} interval={0} />
           <YAxis tickFormatter={formatYAxisValue} />
@@ -246,8 +250,24 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
               return null;
             }
           ) : <CustomTooltip />} />
-          {showIncome && <Bar dataKey="income" fill="#22c55e" radius={[6,6,0,0]} />}
-          {showExpenses && <Bar dataKey="expenses" fill="#f59e0b" radius={[6,6,0,0]} />}
+          {showIncome && (
+            <Bar 
+              dataKey="income" 
+              fill="#22c55e" 
+              radius={[6,6,0,0]} 
+              onClick={onIncomeClick ? (_data, _index) => onIncomeClick(_data) : undefined}
+              cursor={onIncomeClick ? 'pointer' : 'default'}
+            />
+          )}
+          {showExpenses && (
+            <Bar 
+              dataKey="expenses" 
+              fill="#f59e0b" 
+              radius={[6,6,0,0]} 
+              onClick={onExpensesClick ? (_data, _index) => onExpensesClick(_data) : undefined}
+              cursor={onExpensesClick ? 'pointer' : 'default'}
+            />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </div>

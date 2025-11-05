@@ -7,9 +7,13 @@ import { formatDate, formatMoney } from '../utils/format.js';
 import { useLocation } from 'react-router-dom';
 
 export default function Income() {
-  const { income, t, addIncome, updateIncome, removeIncome, persons, categories } = useApp();
+  const { income, t, addIncome, updateIncome, removeIncome, persons, categories, locale } = useApp();
   const location = useLocation();
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [personFilter, setPersonFilter] = useState('');
+  const [periodType, setPeriodType] = useState('all'); // all | month | year
+  const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   const [showForm, setShowForm] = useState(location.state?.openForm || false);
   const { register, handleSubmit, reset, setValue } = useForm();
   const [editingId, setEditingId] = useState(null);
@@ -22,28 +26,63 @@ export default function Income() {
       // Clear the state to prevent reopening on back navigation
       window.history.replaceState({}, document.title);
     }
+    // Apply incoming filters (from Dashboard)
+    if (location.state?.filterPersonId) {
+      setPersonFilter(location.state.filterPersonId);
+    }
+    if (location.state?.periodType) {
+      setPeriodType(location.state.periodType);
+    }
+    if (location.state?.selectedPeriod) {
+      setSelectedPeriod(location.state.selectedPeriod);
+    }
   }, [location.state]);
 
   const incomeCategories = useMemo(() => {
     return (categories || []).filter((c) => String(c?.type?.name || '').toLowerCase() === 'income');
   }, [categories]);
 
+  const personMap = useMemo(() => {
+    const map = new Map();
+    (persons || []).forEach(p => map.set(p.id, p));
+    return map;
+  }, [persons]);
+
+  // Period options
+  const selectedYear = useMemo(() => {
+    const [yStr] = String(selectedPeriod || '').split('-');
+    return Number(yStr) || new Date().getFullYear();
+  }, [selectedPeriod]);
+  const months = useMemo(() => buildFullYearMonths(selectedYear, locale), [selectedYear, locale]);
+  const years = useMemo(() => buildAvailableYears([], income || []), [income]);
+  const periodOptions = periodType === 'month' ? months : years;
+
+  // Filter by period first
+  const periodIncome = useMemo(() => {
+    if (periodType === 'all') return income || [];
+    if (periodType === 'month') return filterByMonth([], income || [], selectedPeriod).periodIncome;
+    return filterByYear([], income || [], Number(selectedPeriod)).periodIncome;
+  }, [income, periodType, selectedPeriod]);
+
   const rows = useMemo(() => {
-    return (income || [])
-      .filter((r) => !query || String(r.source || '').toLowerCase().includes(query.toLowerCase()))
+    const q = query.toLowerCase();
+    return (periodIncome || [])
+      .filter((r) => (!q || String(r.source || '').toLowerCase().includes(q))
+        && (!categoryFilter || (r.category?.id === categoryFilter))
+        && (!personFilter || r.personId === personFilter))
       .map((r) => ({
         ...r,
         date: formatDate(r.date),
         rawAmount: r.amount,
         rawDate: typeof r.date === 'string' ? r.date : new Date(r.date).toISOString(),
       }));
-  }, [income, query]);
+  }, [periodIncome, query, categoryFilter, personFilter]);
 
   const columns = [
-    { key: 'categoryName', header: 'Category' },
+    { key: 'date', header: t('date') },
+    { key: 'categoryName', header: t('category') },
     { key: 'person', header: t('person') },
-    { key: 'amount', header: 'Amount' },
-    { key: 'date', header: 'Date' },
+    { key: 'amount', header: t('amount') },
     { key: 'type', header: t('incomeType') },
   ];
 
@@ -129,7 +168,49 @@ export default function Income() {
       </div>
 
       <Card>
-        <input className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder={t('searchBySource')} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="flex flex-col md:flex-row gap-3 items-center">
+          <input className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder={t('searchBySource')} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">{t('allOption')}</option>
+            {incomeCategories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <select className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}>
+            <option value="">{t('allOption')}</option>
+            {persons.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2 ml-auto">
+            <label className="text-sm text-[#616f89] dark:text-gray-400">{t('period')}:</label>
+            <select
+              className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary"
+              value={periodType}
+              onChange={(e) => {
+                const v = e.target.value;
+                setPeriodType(v);
+                if (v === 'month') setSelectedPeriod(getCurrentYearMonth());
+                else if (v === 'year') setSelectedPeriod(String(new Date().getFullYear()));
+              }}
+            >
+              <option value="all">{t('allOption')}</option>
+              <option value="month">{t('periodMonth')}</option>
+              <option value="year">{t('periodYear')}</option>
+            </select>
+            {periodType !== 'all' && (
+              <select
+                className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary"
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+              >
+                {periodOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
       </Card>
 
       {showForm && (
@@ -197,21 +278,65 @@ export default function Income() {
       {rows.length ? (
         <Table
           columns={columns}
-          rows={rows.map((r) => ({
-            id: r.id,
-            categoryName: r.category?.name ?? r.source ?? '',
-            person: r.person?.name || '',
-            amount: formatMoney(r.rawAmount ?? r.amount, r.currency || 'ARS'),
-            date: r.date,
-            type: r.isRecurring ? t('recurringIncome') : t('extraordinaryIncome'),
-            currency: r.currency,
-            personId: r.personId,
-            category: r.category,
-            source: r.source,
-            rawAmount: r.rawAmount,
-            rawDate: r.rawDate,
-            isRecurring: r.isRecurring,
-          }))}
+          rows={rows.map((r) => {
+            const ym = extractYearMonth(r.date);
+            const monthLabel = ym ? formatMonthYear(new Date(Date.UTC(ym.year, ym.month - 1, 15))) : formatDate(r.date);
+            const personObj = personMap.get(r.personId);
+            const personColor = personObj?.color || '#3b82f6';
+            const personIcon = personObj?.icon || 'person';
+            const categoryName = r.category?.name ?? r.source ?? '';
+            return {
+              id: r.id,
+              date: (
+                <button
+                  type="button"
+                  className="hover:underline hover:text-primary"
+                  title={`${t('filterBy')} ${monthLabel}`}
+                  onClick={() => {
+                    setPeriodType('month');
+                    if (ym) setSelectedPeriod(`${ym.year}-${String(ym.month).padStart(2, '0')}`);
+                  }}
+                >
+                  {monthLabel}
+                </button>
+              ),
+              categoryName: (
+                <div className="flex items-center gap-2">
+                  {categoryName ? (
+                    <span
+                      className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: getCategoryColor(categoryName) }}
+                    />
+                  ) : (
+                    <span className="inline-block w-3 h-3 rounded-full bg-gray-400" />
+                  )}
+                  <span>{categoryName || '-'}</span>
+                </div>
+              ),
+              person: (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPersonFilter(personFilter === r.personId ? '' : (r.personId || ''))}
+                    className={`material-symbols-outlined text-lg transition-all hover:scale-110 cursor-pointer ${personFilter === r.personId ? 'ring-2 ring-primary ring-offset-1 rounded' : ''}`}
+                    style={{ color: personColor }}
+                    title={`${t('filterBy')} ${r.person?.name || ''}`}
+                  >
+                    {personIcon}
+                  </button>
+                  <span>{r.person?.name || '-'}</span>
+                </div>
+              ),
+              amount: formatMoney(r.rawAmount ?? r.amount, r.currency || 'ARS'),
+              type: r.isRecurring ? t('recurringIncome') : t('extraordinaryIncome'),
+              currency: r.currency,
+              personId: r.personId,
+              category: r.category,
+              source: r.source,
+              rawAmount: r.rawAmount,
+              rawDate: r.rawDate,
+              isRecurring: r.isRecurring,
+            };
+          })}
           onDelete={handleDelete}
           onEdit={handleEdit}
         />
@@ -222,6 +347,103 @@ export default function Income() {
       )}
     </div>
   );
+}
+
+// Helpers (subset from Spreadsheet.jsx)
+function getCurrentYearMonth() {
+  const now = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit' });
+    const parts = formatter.formatToParts(now);
+    const y = parts.find((p) => p.type === 'year');
+    const m = parts.find((p) => p.type === 'month');
+    if (y && m) return `${y.value}-${m.value}`;
+  } catch {}
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function extractYearMonth(dateStr) {
+  if (!dateStr) return null;
+  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
+  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return { year: Number(m[1]), month: Number(m[2]) };
+  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return { year: Number(m[3]), month: Number(m[2]) };
+  const d = new Date(str);
+  if (Number.isNaN(d.getTime())) return null;
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+}
+
+function buildFullYearMonths(year, locale) {
+  const arr = [];
+  for (let m = 1; m <= 12; m += 1) {
+    const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
+    const raw = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    const three = raw.replace('.', '').slice(0, 3);
+    const monthAbbr = three.charAt(0).toUpperCase() + three.slice(1);
+    const label = `${monthAbbr} ${year}`;
+    arr.push({ value: `${year}-${String(m).padStart(2, '0')}`, label });
+  }
+  return arr.sort((a, b) => (a.value < b.value ? 1 : -1));
+}
+
+function buildAvailableYears(_expenses = [], income = []) {
+  const set = new Set();
+  const add = (ts) => {
+    const ym = extractYearMonth(ts);
+    if (ym) set.add(String(ym.year));
+  };
+  income.forEach((i) => add(i.date));
+  if (set.size === 0) set.add(String(new Date().getFullYear()));
+  const values = Array.from(set).sort((a, b) => (a < b ? 1 : -1));
+  return values.map((v) => ({ value: v, label: v }));
+}
+
+function filterByMonth(_expenses = [], income = [], yearMonth) {
+  const [yStr, mStr] = (yearMonth || '').split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const inMonth = (ts) => {
+    const ym = extractYearMonth(ts);
+    return ym && ym.year === y && ym.month === m;
+  };
+  return { periodIncome: income.filter((i) => inMonth(i.date)) };
+}
+
+function filterByYear(_expenses = [], income = [], year) {
+  const inYear = (ts) => {
+    const ym = extractYearMonth(ts);
+    return ym && ym.year === year;
+  };
+  return { periodIncome: income.filter((i) => inYear(i.date)) };
+}
+
+function formatMonthYear(value) {
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value || '');
+    const mf = new Intl.DateTimeFormat('es-AR', { month: 'short', year: 'numeric' });
+    const out = mf.format(d).replace('.', '');
+    return out.charAt(0).toUpperCase() + out.slice(1);
+  } catch {
+    return String(value || '');
+  }
+}
+
+function getCategoryColor(categoryName) {
+  if (!categoryName) return '#9ca3af';
+  let hash = 0;
+  for (let i = 0; i < categoryName.length; i++) {
+    hash = categoryName.charCodeAt(i) + ((hash << 5) - hash);
+    hash = hash & hash;
+  }
+  const goldenAngle = 137.508;
+  const hue = (Math.abs(hash) * goldenAngle) % 360;
+  const saturation = 55 + (Math.abs(hash) % 35);
+  const lightness = 45 + (Math.abs(hash >> 8) % 20);
+  return `hsl(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`;
 }
 
 
