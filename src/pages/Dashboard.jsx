@@ -96,49 +96,41 @@ export default function Dashboard() {
   }, [monthTotals, previousPeriodTotals]);
 
   const pieData = useMemo(() => {
+    // Sumar exactamente como en la Grilla: montos crudos por categoría
     const map = new Map();
-    for (const e of periodExpenses) {
-      const name = (typeof e.category === 'object' && e.category) ? (e.category.name || t('expenseGeneric')) : (e.category || t('expenseGeneric'));
+    for (const e of (periodExpenses || [])) {
+      const name = (typeof e.category === 'object' && e.category)
+        ? (e.category.name || t('expenseGeneric'))
+        : (e.category || t('expenseGeneric'));
       const amount = Number(e.amount || 0);
-      // Only add valid, positive numbers
-      if (!isNaN(amount) && isFinite(amount) && amount > 0) {
-        const prev = map.get(name) || 0;
-        map.set(name, prev + amount);
+      if (!isNaN(amount) && isFinite(amount)) {
+        map.set(name, (map.get(name) || 0) + amount);
       }
     }
-    
-    // Convert to array and filter out zero values
+
+    // Convertir a array y mantener solo categorías con total positivo
     let allData = Array.from(map.entries())
       .map(([name, value]) => ({ name, value: Number(value) }))
       .filter(item => item.value > 0);
-    
+
     if (allData.length === 0) return [];
-    
-    // Calculate total
+
+    // Total para umbral de "Otros"
     const total = allData.reduce((sum, item) => sum + item.value, 0);
     if (total === 0) return [];
-    
-    // Group small categories (less than 2% of total) into "Otros"
-    const threshold = total * 0.02; // 2% threshold
+
+    const threshold = total * 0.02; // 2%
     const mainCategories = [];
     let othersSum = 0;
-    
+
     for (const item of allData) {
-      if (item.value >= threshold) {
-        mainCategories.push(item);
-      } else {
-        othersSum += item.value;
-      }
+      if (item.value >= threshold) mainCategories.push(item);
+      else othersSum += item.value;
     }
-    
-    // Sort main categories by value descending
+
     mainCategories.sort((a, b) => b.value - a.value);
-    
-    // Add "Otros" category if there are small categories
-    if (othersSum > 0) {
-      mainCategories.push({ name: t('others') || 'Otros', value: othersSum });
-    }
-    
+    if (othersSum > 0) mainCategories.push({ name: t('others') || 'Otros', value: othersSum });
+
     return mainCategories;
   }, [periodExpenses, t]);
 
@@ -268,67 +260,8 @@ export default function Dashboard() {
           )}
         </Card>
       </section>
-
-      {/* Recent Transactions */}
-      <section className="rounded-xl border border-gray-200 dark:border-gray-800 p-6 bg-white dark:bg-gray-900/50">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">{t('recentTransactions')}</h3>
-        </div>
-        <div className="flow-root">
-          <ul className="divide-y divide-gray-200 dark:divide-gray-800" role="list">
-            {getRecentTransactions(periodIncome, periodExpenses, t).map((t) => (
-              <li key={t.id} className="py-3 sm:py-4">
-                <div className="flex items-center space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className={`flex items-center justify-center size-10 rounded-full ${t.kind === 'income' ? 'bg-green-100 dark:bg-green-900/40' : 'bg-orange-100 dark:bg-orange-900/40'}`}>
-                      <span className="material-symbols-outlined text-gray-600 dark:text-gray-300">{t.icon}</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{t.title}</p>
-                    <p className="text-sm text-[#616f89] dark:text-gray-400 truncate">
-                      {t.category}
-                    </p>
-                  </div>
-                  <div className={`inline-flex items-center text-base font-semibold ${t.kind === 'income' ? 'text-green-600' : 'text-orange-500'}`}>{t.displayAmount}</div>
-                </div>
-              </li>
-            ))}
-            {getRecentTransactions(periodIncome, periodExpenses, t).length === 0 && (
-              <li className="py-2 text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</li>
-            )}
-          </ul>
-        </div>
-      </section>
     </div>
   );
-}
-
-function getRecentTransactions(income = [], expenses = [], t) {
-  const incomeItems = income.map((i) => ({
-    id: `i-${i.id ?? Math.random()}`,
-    kind: 'income',
-    title: i.source || t('incomeGeneric'),
-    category: t('incomeGeneric'),
-    amount: Number(String(i.amount || 0).toString().replace(/[^0-9.-]/g, '')),
-    displayAmount: formatMoney(i.amount || 0, i.currency || 'ARS', { sign: 'always' }),
-    date: new Date(i.date || 0).getTime() || 0,
-    icon: 'work',
-  }));
-  const expenseItems = expenses.map((e) => ({
-    id: `e-${e.id ?? Math.random()}`,
-    kind: 'expense',
-    title: e.notes || t('expenseGeneric'),
-    category: (typeof e.category === 'object' && e.category) ? (e.category.name || t('expenseGeneric')) : (e.category || t('expenseGeneric')),
-    amount: -Number(String(e.amount || 0).toString().replace(/[^0-9.-]/g, '')),
-    displayAmount: '-' + formatMoney(e.amount || 0, e.currency || 'ARS', { sign: 'none' }),
-    date: new Date(e.date || 0).getTime() || 0,
-    icon: 'shopping_cart',
-  }));
-
-  return [...incomeItems, ...expenseItems]
-    .sort((a, b) => b.date - a.date)
-    .slice(0, 5);
 }
 
 function getCurrentYearMonth() {
@@ -467,25 +400,14 @@ function filterByYear(expenses = [], income = [], year) {
   return { periodIncome, periodExpenses };
 }
 
-function computeTotals(expenses = [], income = [], investmentSummary = null) {
-  // Ensure expenses are always positive (some data might have negative values)
-  const totalExpenses = expenses.reduce((acc, r) => {
-    const amount = Number(r.amount || 0);
-    // Use absolute value to ensure expenses are always positive
-    return acc + Math.abs(amount);
-  }, 0);
-  const totalIncome = income.reduce((acc, r) => {
-    const amount = Number(r.amount || 0);
-    // Ensure income is always positive
-    return acc + Math.abs(amount);
-  }, 0);
-  // Add investment profit as income (only profit, not total value)
-  const investmentProfit = investmentSummary ? (Number(investmentSummary.profit || 0)) : 0;
-  const totalIncomeWithInvestments = totalIncome + investmentProfit;
+function computeTotals(expenses = [], income = []) {
+  // Match Grilla: sumar montos crudos (sin valor absoluto)
+  const totalExpenses = expenses.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const totalIncome = income.reduce((acc, r) => acc + Number(r.amount || 0), 0);
   return {
     totalExpenses,
-    totalIncome: totalIncomeWithInvestments,
-    balance: totalIncomeWithInvestments - totalExpenses,
+    totalIncome,
+    balance: totalIncome - totalExpenses,
   };
 }
 

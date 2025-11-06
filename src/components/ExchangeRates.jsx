@@ -58,7 +58,7 @@ export default function ExchangeRates() {
       setHistoryData(data);
       setShowHistory(true);
     } catch (error) {
-      console.error('Failed to load history:', error);
+      // Failed to load history silently ignored
     } finally {
       setLoadingHistory(false);
     }
@@ -67,14 +67,9 @@ export default function ExchangeRates() {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      const d = new Date(dateString);
+      const raw = new Intl.DateTimeFormat('es-AR', { month: 'short', year: 'numeric' }).format(d);
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
     } catch {
       return '';
     }

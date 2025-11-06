@@ -78,7 +78,6 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
       setIsEditing(false);
       if (onSave) onSave();
     } catch (error) {
-      console.error('Error saving:', error);
       // Revert on error
       setEditValue(value);
       setIsEditing(false);
@@ -231,8 +230,8 @@ export default function Spreadsheet() {
       id: e.id,
       type: 'expense',
       category: e.category?.name || '',
+      concept: e.name || e.notes || '',
       amount: e.amount,
-      currency: e.currency || 'ARS',
       date: e.date,
       notes: e.notes || '',
       rawDate: typeof e.date === 'string' ? e.date : new Date(e.date).toISOString(),
@@ -241,9 +240,9 @@ export default function Spreadsheet() {
     const incomeRows = (periodIncome || []).map((i) => ({
       id: i.id,
       type: 'income',
-      category: i.category?.name || '',
+      category: i.category?.name || i.source || '',
+      concept: i.notes || i.source || '',
       amount: i.amount,
-      currency: i.currency || 'ARS',
       date: i.date,
       notes: i.notes || '',
       rawDate: typeof i.date === 'string' ? i.date : new Date(i.date).toISOString(),
@@ -409,13 +408,8 @@ export default function Spreadsheet() {
           <table className="min-w-full border-collapse">
             <thead className="bg-gray-50 dark:bg-gray-900/50 sticky top-0 z-10">
               <tr>
-                <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
-                  onClick={() => handleSort('date')}
-                >
-                  <div className="flex items-center gap-2">
-                    {t('date')} {getSortIcon('date')}
-                  </div>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
+                  {t('type')}
                 </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
@@ -425,6 +419,9 @@ export default function Spreadsheet() {
                     {t('category')} {getSortIcon('category')}
                   </div>
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
+                  {t('concept') || 'Concepto'}
+                </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
                   onClick={() => handleSort('amount')}
@@ -433,8 +430,13 @@ export default function Spreadsheet() {
                     {t('amount')} {getSortIcon('amount')}
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
-                  {t('currency')}
+                <th
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                  onClick={() => handleSort('date')}
+                >
+                  <div className="flex items-center gap-2">
+                    {t('date')} {getSortIcon('date')}
+                  </div>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
                   {t('notes')}
@@ -448,6 +450,42 @@ export default function Spreadsheet() {
                     key={`${row.type}-${row.id}`}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                   >
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
+                      {row.type === 'income' ? t('income') : t('expense')}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
+                      <div className="flex items-center gap-2">
+                        {row.category ? (
+                          <>
+                            <button
+                              onClick={() => setFilterCategory(filterCategory === row.category ? null : row.category)}
+                              className={`inline-block w-3 h-3 rounded-full flex-shrink-0 transition-all hover:scale-125 cursor-pointer ${
+                                filterCategory === row.category ? 'ring-2 ring-primary ring-offset-1' : ''
+                              }`}
+                              style={{ backgroundColor: getCategoryColor(row.category) }}
+                              title={`${t('filterBy')} ${row.category}`}
+                            />
+                            <span>{row.category}</span>
+                          </>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
+                      {row.concept || '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
+                      <EditableCell
+                        value={row.amount}
+                        type={row.type}
+                        row={row}
+                        field="amount"
+                        onSave={() => {}}
+                        t={t}
+                        formatMonthYear={formatMonthYear}
+                      />
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
                       <div className="flex items-center gap-2">
                         <EditableCell
@@ -479,47 +517,6 @@ export default function Spreadsheet() {
                           🔍
                         </button>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      <div className="flex items-center gap-2">
-                        {row.category ? (
-                          <>
-                            <button
-                              onClick={() => setFilterCategory(filterCategory === row.category ? null : row.category)}
-                              className={`inline-block w-3 h-3 rounded-full flex-shrink-0 transition-all hover:scale-125 cursor-pointer ${
-                                filterCategory === row.category ? 'ring-2 ring-primary ring-offset-1' : ''
-                              }`}
-                              style={{ backgroundColor: getCategoryColor(row.category) }}
-                              title={`${t('filterBy')} ${row.category}`}
-                            />
-                            <span>{row.category}</span>
-                          </>
-                        ) : (
-                          <span>-</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      <EditableCell
-                        value={row.amount}
-                        type={row.type}
-                        row={row}
-                        field="amount"
-                        onSave={() => {}}
-                        t={t}
-                        formatMonthYear={formatMonthYear}
-                      />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-900">
-                      <EditableCell
-                        value={row.currency || 'ARS'}
-                        type={row.type}
-                        row={row}
-                        field="currency"
-                        onSave={() => {}}
-                        t={t}
-                        formatMonthYear={formatMonthYear}
-                      />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900 max-w-xs">
                       <EditableCell

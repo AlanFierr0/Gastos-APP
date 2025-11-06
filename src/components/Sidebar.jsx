@@ -16,25 +16,17 @@ export default function Sidebar() {
   return (
     <aside className="w-64 shrink-0 border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-background-dark sticky top-0 h-screen overflow-y-auto">
       <nav className="flex flex-col gap-2 p-4">
-        <NavLink className={linkClass} to="/spreadsheet">
-          <span className="material-symbols-outlined">table_chart</span>
-          <span className="text-sm font-medium">{t('spreadsheet')}</span>
+        <NavLink className={linkClass} to="/dashboard">
+          <span className="material-symbols-outlined">dashboard</span>
+          <span className="text-sm font-medium">{t('dashboard')}</span>
         </NavLink>
         <NavLink className={linkClass} to="/grid">
           <span className="material-symbols-outlined">grid_on</span>
           <span className="text-sm font-medium">{t('grid') || 'Grilla'}</span>
         </NavLink>
-        <NavLink className={linkClass} to="/dashboard">
-          <span className="material-symbols-outlined">dashboard</span>
-          <span className="text-sm font-medium">{t('dashboard')}</span>
-        </NavLink>
-        <NavLink className={linkClass} to="/expenses">
-          <span className="material-symbols-outlined">receipt_long</span>
-          <span className="text-sm font-medium">{t('expenses')}</span>
-        </NavLink>
-        <NavLink className={linkClass} to="/income">
-          <span className="material-symbols-outlined">account_balance_wallet</span>
-          <span className="text-sm font-medium">{t('income')}</span>
+        <NavLink className={linkClass} to="/spreadsheet">
+          <span className="material-symbols-outlined">table_chart</span>
+          <span className="text-sm font-medium">{t('spreadsheet')}</span>
         </NavLink>
         <NavLink className={linkClass} to="/investments">
           <span className="material-symbols-outlined">trending_up</span>

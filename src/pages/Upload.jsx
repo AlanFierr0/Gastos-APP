@@ -234,9 +234,9 @@ export default function Upload() {
                   <thead className="sticky top-0 bg-white dark:bg-gray-900 z-10">
                     <tr className="border-b border-gray-200 dark:border-gray-700">
                       <th className="text-left p-2">{t('type')}</th>
-                      <th className="text-left p-2">{previewData[0]?.kind === 'income' ? t('source') : t('category')}</th>
+                      <th className="text-left p-2">{t('category')}</th>
+                      <th className="text-left p-2">{t('concept') || 'Concepto'}</th>
                       <th className="text-left p-2">{t('amount')}</th>
-                      <th className="text-left p-2">{t('currency')}</th>
                       <th className="text-left p-2">{t('date')}</th>
                       <th className="text-left p-2">{t('notes')}</th>
                       <th className="text-left p-2">{t('edit')}</th>
@@ -340,8 +340,16 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
         <td className="p-2">
           <input
             type="text"
-            value={editedRecord.kind === 'income' ? (editedRecord.source || '') : (editedRecord.categoryName || '')}
-            onChange={(e) => handleFieldChange(editedRecord.kind === 'income' ? 'source' : 'categoryName', e.target.value)}
+            value={editedRecord.categoria || ''}
+            onChange={(e) => handleFieldChange('categoria', e.target.value)}
+            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
+          />
+        </td>
+        <td className="p-2">
+          <input
+            type="text"
+            value={editedRecord.nombre || ''}
+            onChange={(e) => handleFieldChange('nombre', e.target.value)}
             className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
           />
         </td>
@@ -355,21 +363,6 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
           />
         </td>
         <td className="p-2">
-          <select
-            value={editedRecord.currency || 'ARS'}
-            onChange={(e) => handleFieldChange('currency', e.target.value)}
-            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
-          >
-            <option value="ARS">ARS</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="BRL">BRL</option>
-            <option value="MXN">MXN</option>
-            <option value="CLP">CLP</option>
-            <option value="UYU">UYU</option>
-          </select>
-        </td>
-        <td className="p-2">
           <input
             type="date"
             value={editedRecord.date ? new Date(editedRecord.date).toISOString().slice(0, 10) : ''}
@@ -380,8 +373,8 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
         <td className="p-2">
           <input
             type="text"
-            value={editedRecord.notes || ''}
-            onChange={(e) => handleFieldChange('notes', e.target.value || undefined)}
+            value={editedRecord.nota || ''}
+            onChange={(e) => handleFieldChange('nota', e.target.value || '')}
             className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
           />
         </td>
@@ -408,11 +401,11 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
   return (
     <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
       <td className="p-2">{record.kind === 'income' ? t('income') : t('expense')}</td>
-      <td className="p-2">{record.kind === 'income' ? (record.source || '-') : (record.categoryName || '-')}</td>
+      <td className="p-2">{record.categoria || '-'}</td>
+      <td className="p-2">{record.nombre || '-'}</td>
       <td className="p-2">{formatMoney(record.amount, record.currency || 'ARS', { sign: 'auto' })}</td>
-      <td className="p-2">{record.currency || 'ARS'}</td>
       <td className="p-2">{formatDate(record.date)}</td>
-      <td className="p-2">{record.notes || '-'}</td>
+      <td className="p-2">{record.nota || '-'}</td>
       <td className="p-2">
         <div className="flex gap-1">
           <button

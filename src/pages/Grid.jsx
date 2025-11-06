@@ -296,10 +296,9 @@ export default function Grid() {
       } else {
         // No records exist for this cell - would need to create a new record
         // For now, we'll just skip this case
-        console.log('Cannot create new record from grid edit');
       }
     } catch (error) {
-      console.error('Error saving:', error);
+      // Error saving silently ignored
     } finally {
       setEditingCell(null);
       setEditValue('');
@@ -511,10 +510,12 @@ export default function Grid() {
                               </thead>
                               <tbody>
                                 {(() => {
-                                  // Group records by concept (notes, source, or category name)
+                                  // Group records by concept: for expenses use record.name; for income use notes/source
                                   const conceptMap = new Map();
                                   row.records.forEach((record) => {
-                                    const conceptLabel = record.notes || record.source || record.category?.name || `${record.type === 'expense' ? (t('expense') || 'Gasto') : (t('income') || 'Ingreso')}`;
+                                    const conceptLabel = record.type === 'expense'
+                                      ? (record.name || record.notes || (t('concept') || 'Concepto'))
+                                      : (record.notes || record.source || (t('concept') || 'Concepto'));
                                     if (!conceptMap.has(conceptLabel)) {
                                       conceptMap.set(conceptLabel, {
                                         label: conceptLabel,

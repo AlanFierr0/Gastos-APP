@@ -4,21 +4,18 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ee5962b1-1427-49bb-bd51-ce3b98b76c03" name="Changes" comment="feat: add clickable chart functionality and update cursor styles for interactivity">
+    <list default="true" id="ee5962b1-1427-49bb-bd51-ce3b98b76c03" name="Changes" comment="feat: add grid page and remove person-related functionality from various components">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/Chart.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/Chart.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/ExchangeRates.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ExchangeRates.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/Sidebar.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/Sidebar.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/context/AppContext.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/context/AppContext.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/i18n.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/i18n.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Dashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Dashboard.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/Expenses.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Expenses.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/Income.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Income.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/Investments.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Investments.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/pages/People.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/People.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pages/Expenses.jsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pages/Grid.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Grid.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pages/Income.jsx" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Spreadsheet.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Spreadsheet.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Upload.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Upload.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/format.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/format.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,12 +31,12 @@
     &quot;assignee&quot;: &quot;AlanFierr0&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/AlanFierr0/Gastos-APP.git",
-    "accountId": "5c0f43b5-ed79-431a-8124-4973cb193348"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/AlanFierr0/Gastos-APP.git&quot;,
+    &quot;accountId&quot;: &quot;5c0f43b5-ed79-431a-8124-4973cb193348&quot;
   }
-}]]></component>
+}</component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -103,7 +100,8 @@
       <workItem from="1762187275209" duration="6929000" />
       <workItem from="1762201120882" duration="16000" />
       <workItem from="1762202172005" duration="372000" />
-      <workItem from="1762391968280" duration="8741000" />
+      <workItem from="1762391968280" duration="8842000" />
+      <workItem from="1762437882815" duration="1320000" />
     </task>
     <task id="LOCAL-00001" summary="feat: enhance financial analysis and data handling with localization support">
       <option name="closed" value="true" />
@@ -145,7 +143,15 @@
       <option name="project" value="LOCAL" />
       <updated>1762328420440</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="feat: add grid page and remove person-related functionality from various components">
+      <option name="closed" value="true" />
+      <created>1762409585629</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1762409585629</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -162,6 +168,7 @@
     <MESSAGE value="refactor: remove debug console logs and clean up code" />
     <MESSAGE value="feat: add filtering options for income and expenses, enhance chart interactivity" />
     <MESSAGE value="feat: add clickable chart functionality and update cursor styles for interactivity" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: add clickable chart functionality and update cursor styles for interactivity" />
+    <MESSAGE value="feat: add grid page and remove person-related functionality from various components" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add grid page and remove person-related functionality from various components" />
   </component>
 </project>

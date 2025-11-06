@@ -5,8 +5,6 @@ import './index.css';
 import AppLayout from './ui/AppLayout.jsx';
 import { AppProvider } from './context/AppContext.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Expenses from './pages/Expenses.jsx';
-import Income from './pages/Income.jsx';
 import Upload from './pages/Upload.jsx';
 import Spreadsheet from './pages/Spreadsheet.jsx';
 import Grid from './pages/Grid.jsx';
@@ -22,8 +20,7 @@ root.render(
           <Route element={<AppLayout />}> 
             <Route index element={<Navigate to="/spreadsheet" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/expenses" element={<Expenses />} />
-            <Route path="/income" element={<Income />} />
+            {/** expenses/income removidos **/}
             <Route path="/investments" element={<Investments />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/spreadsheet" element={<Spreadsheet />} />
