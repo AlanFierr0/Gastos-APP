@@ -12,7 +12,14 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const selectedFile = watch('file');
+  
+  // Generate year options from 1998 to 2050
+  const yearOptions = [];
+  for (let i = 1998; i <= 2050; i++) {
+    yearOptions.push(i);
+  }
 
   const getErrorMessage = (error) => {
     if (!error) return t('uploadFailed');
@@ -51,11 +58,12 @@ export default function Upload() {
   const onFileSelect = async (values) => {
     if (!values.file?.[0]) return;
     setLoading(true);
-    setStatus('Analizando gastos e ingresos...');
+    setStatus(t('analyzingFile') || 'Analizando tu archivo...');
     
     try {
       const form = new FormData();
       form.append('file', values.file[0]);
+      form.append('year', String(selectedYear));
       const result = await api.previewExcel(form);
       const records = result.records || [];
       setPreviewData(records);
@@ -141,7 +149,7 @@ export default function Upload() {
     setLoading(true);
     setStatus(t('uploading'));
     try {
-      const result = await api.confirmImport(previewData);
+      const result = await api.confirmImport(previewData, selectedYear);
       let message = result.message || t('importSuccess');
       
       // Build detailed message with errors and warnings
@@ -205,12 +213,29 @@ export default function Upload() {
               className="block w-full text-sm text-gray-700 dark:text-gray-200 file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-white hover:file:bg-primary/90" 
               {...register('file')} 
             />
+            <div className="flex items-center gap-3">
+              <label htmlFor="year-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('year') || 'Año'}:
+              </label>
+              <select
+                id="year-select"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="flex justify-end">
               <button 
                 disabled={loading || !selectedFile?.[0]} 
                 className="h-12 px-5 rounded-lg bg-primary text-white font-bold disabled:opacity-50"
               >
-                {loading ? 'Analizando...' : 'Analizar archivo'}
+                {loading ? (t('analyzingFile') || 'Analizando...') : (t('analyzeFile') || 'Analizar archivo')}
               </button>
             </div>
           </form>
@@ -359,7 +384,7 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
             step="0.01"
             value={editedRecord.amount || ''}
             onChange={(e) => handleFieldChange('amount', Number(e.target.value))}
-            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
+            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
           />
         </td>
         <td className="p-2">

@@ -75,19 +75,25 @@ export default function Dashboard() {
 
   const previousPeriodTotals = useMemo(() => {
     let prevPeriod;
+    let prevPeriodLabel;
     if (periodType === 'month') {
       const [y, m] = effectivePeriod.split('-').map(Number);
       const prevDate = new Date(Date.UTC(y, m - 2, 1));
       prevPeriod = `${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth() + 1).padStart(2, '0')}`;
+      // Get label from periodOptions
+      const prevOption = periodOptions.find((p) => p.value === prevPeriod);
+      prevPeriodLabel = prevOption?.label || prevPeriod;
     } else {
       prevPeriod = String(Number(effectivePeriod) - 1);
+      prevPeriodLabel = prevPeriod;
     }
     if (!prevPeriod) return null;
     const prev = periodType === 'month'
       ? filterByMonth(expenses, income, prevPeriod)
       : filterByYear(expenses, income, Number(prevPeriod));
-    return computeTotals(prev.periodExpenses, prev.periodIncome, investmentSummary);
-  }, [periodType, effectivePeriod, expenses, income, investmentSummary]);
+    const totals = computeTotals(prev.periodExpenses, prev.periodIncome, investmentSummary);
+    return { ...totals, periodLabel: prevPeriodLabel };
+  }, [periodType, effectivePeriod, expenses, income, investmentSummary, periodOptions]);
 
   const trends = useMemo(() => {
     if (!previousPeriodTotals) {
@@ -104,14 +110,39 @@ export default function Dashboard() {
     };
     const incomeChange = calcChange(monthTotals.totalIncome, previousPeriodTotals.totalIncome);
     const expensesChange = calcChange(monthTotals.totalExpenses, previousPeriodTotals.totalExpenses);
+    const comparisonLabel = periodType === 'month' 
+      ? (t('vsPreviousMonth') || 'vs. Mes anterior')
+      : (t('vsPreviousYear') || 'vs. Año anterior');
     return {
-      income: incomeChange ? { ...incomeChange, positive: incomeChange.positive } : null,
-      expenses: expensesChange ? { ...expensesChange, positive: !expensesChange.positive } : null, // Inverted: more expenses = bad (red)
+      income: incomeChange ? { 
+        ...incomeChange, 
+        positive: incomeChange.positive,
+        previousValue: previousPeriodTotals.totalIncome,
+        comparisonLabel 
+      } : null,
+      expenses: expensesChange ? { 
+        ...expensesChange, 
+        positive: !expensesChange.positive, // Inverted: more expenses = bad (red)
+        previousValue: previousPeriodTotals.totalExpenses,
+        comparisonLabel
+      } : null,
       balance: monthTotals.balance >= 0
-        ? { positive: true, label: 'Positive', change: calcChange(monthTotals.balance, previousPeriodTotals.balance) }
-        : { positive: false, label: 'Negative', change: calcChange(monthTotals.balance, previousPeriodTotals.balance) },
+        ? { 
+            positive: true, 
+            label: 'Positive', 
+            change: calcChange(monthTotals.balance, previousPeriodTotals.balance),
+            previousValue: previousPeriodTotals.balance,
+            comparisonLabel
+          }
+        : { 
+            positive: false, 
+            label: 'Negative', 
+            change: calcChange(monthTotals.balance, previousPeriodTotals.balance),
+            previousValue: previousPeriodTotals.balance,
+            comparisonLabel
+          },
     };
-  }, [monthTotals, previousPeriodTotals]);
+  }, [monthTotals, previousPeriodTotals, periodType, t]);
 
   const pieData = useMemo(() => {
     // Sumar exactamente como en la Grilla: montos crudos por categoría
@@ -228,9 +259,14 @@ export default function Dashboard() {
             {formatMoney(monthTotals.totalIncome, 'ARS', { sign: 'none' })}
           </p>
           {trends.income && (
-            <div className={`flex items-center gap-1 mt-1 text-sm ${trends.income.positive ? 'text-green-600' : 'text-red-500'}`}>
-              <span className="material-symbols-outlined text-sm">{trends.income.positive ? 'trending_up' : 'trending_down'}</span>
-              <span>{trends.income.positive ? '+' : '-'}{Math.abs(trends.income.value).toFixed(1)}%</span>
+            <div className="mt-2 space-y-1">
+              <div className={`flex items-center gap-1 text-sm ${trends.income.positive ? 'text-green-600' : 'text-red-500'}`}>
+                <span className="material-symbols-outlined text-sm">{trends.income.positive ? 'trending_up' : 'trending_down'}</span>
+                <span>{trends.income.positive ? '+' : '-'}{Math.abs(trends.income.value).toFixed(1)}%</span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {trends.income.comparisonLabel}: {formatMoney(trends.income.previousValue, 'ARS', { sign: 'none' })}
+              </div>
             </div>
           )}
         </Card>
@@ -240,9 +276,14 @@ export default function Dashboard() {
             {formatMoney(monthTotals.totalExpenses, 'ARS', { sign: 'none' })}
           </p>
           {trends.expenses && (
-            <div className={`flex items-center gap-1 mt-1 text-sm ${trends.expenses.positive ? 'text-green-600' : 'text-red-500'}`}>
-              <span className="material-symbols-outlined text-sm">{trends.expenses.positive ? 'trending_up' : 'trending_down'}</span>
-              <span>{trends.expenses.positive ? '+' : '-'}{Math.abs(trends.expenses.value).toFixed(1)}%</span>
+            <div className="mt-2 space-y-1">
+              <div className={`flex items-center gap-1 text-sm ${trends.expenses.positive ? 'text-green-600' : 'text-red-500'}`}>
+                <span className="material-symbols-outlined text-sm">{trends.expenses.positive ? 'trending_up' : 'trending_down'}</span>
+                <span>{trends.expenses.positive ? '+' : '-'}{Math.abs(trends.expenses.value).toFixed(1)}%</span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {trends.expenses.comparisonLabel}: {formatMoney(trends.expenses.previousValue, 'ARS', { sign: 'none' })}
+              </div>
             </div>
           )}
         </Card>
@@ -252,17 +293,22 @@ export default function Dashboard() {
             {formatMoney(monthTotals.balance, 'ARS')}
           </p>
           {trends.balance && (
-            <div className={`flex items-center gap-1 mt-1 text-sm ${((trends.balance.change ? trends.balance.change.positive : trends.balance.positive) ? 'text-green-600' : 'text-red-500')}`}>
+            <div className="mt-2 space-y-1">
               {trends.balance.change ? (
                 <>
-                  <span className="material-symbols-outlined text-sm">{trends.balance.change.positive ? 'trending_up' : 'trending_down'}</span>
-                  <span>{trends.balance.change.positive ? '+' : '-'}{Math.abs(trends.balance.change.value).toFixed(1)}%</span>
+                  <div className={`flex items-center gap-1 text-sm ${trends.balance.change.positive ? 'text-green-600' : 'text-red-500'}`}>
+                    <span className="material-symbols-outlined text-sm">{trends.balance.change.positive ? 'trending_up' : 'trending_down'}</span>
+                    <span>{trends.balance.change.positive ? '+' : '-'}{Math.abs(trends.balance.change.value).toFixed(1)}%</span>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {trends.balance.comparisonLabel}: {formatMoney(trends.balance.previousValue, 'ARS')}
+                  </div>
                 </>
               ) : (
-                <>
+                <div className={`flex items-center gap-1 text-sm ${trends.balance.positive ? 'text-green-600' : 'text-red-500'}`}>
                   <span className="material-symbols-outlined text-sm">{trends.balance.positive ? 'check_circle' : 'cancel'}</span>
                   <span>{trends.balance.label}</span>
-                </>
+                </div>
               )}
             </div>
           )}

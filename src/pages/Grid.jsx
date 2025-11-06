@@ -64,7 +64,7 @@ function formatMonthYearLabel(year, month) {
 }
 
 export default function Grid() {
-  const { expenses, income, updateExpense, updateIncome, t } = useApp();
+  const { expenses, income, updateExpense, updateIncome, addExpense, addIncome, categories, t } = useApp();
   const [selectedCell, setSelectedCell] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
@@ -321,7 +321,11 @@ export default function Grid() {
 
     try {
       const numValue = parseFloat(String(editValue).replace(/[^\d.-]/g, ''));
-      if (isNaN(numValue) || numValue < 0) return;
+      if (isNaN(numValue) || numValue < 0) {
+        setEditingCell(null);
+        setEditValue('');
+        return;
+      }
 
       const records = row.monthData[monthKey] || [];
       const currentTotal = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
@@ -347,8 +351,36 @@ export default function Grid() {
           }
         }
       } else {
-        // No records exist for this cell - would need to create a new record
-        // For now, we'll just skip this case
+        // No records exist for this cell - create a new record
+        const [year, month] = monthKey.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0)).toISOString();
+        
+        if (gridType === 'expense') {
+          // Find or create category
+          const categoryName = row.key.toLowerCase();
+          let categoryId = null;
+          const category = categories?.find(c => c.name?.toLowerCase() === categoryName);
+          if (category) {
+            categoryId = category.id;
+          }
+          
+          await addExpense({
+            categoryId,
+            categoryName: categoryName,
+            name: row.key,
+            amount: numValue,
+            date,
+            notes: '',
+          });
+        } else {
+          // For income, use row.key as source and notes
+          await addIncome({
+            source: row.key.toLowerCase(),
+            amount: numValue,
+            date,
+            notes: row.key,
+          });
+        }
       }
     } catch (error) {
       // Error saving silently ignored
@@ -464,7 +496,7 @@ export default function Grid() {
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleSave}
           onKeyDown={(e) => handleKeyDown(e, gridType)}
-          className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-center"
+          className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-center [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
           style={{ minWidth: '85px' }}
         />
       );
@@ -479,8 +511,9 @@ export default function Grid() {
       <div
         className={`px-1 py-0.5 text-sm text-center ${isSelected ? 'bg-blue-200 dark:bg-blue-800/50' : 'hover:bg-amber-100 dark:hover:bg-amber-900/30'} ${isForecast ? 'opacity-60 italic' : ''}`}
         onClick={() => handleCellClick(rowIndex, monthKey, gridType)}
+        onDoubleClick={() => handleCellDoubleClick(rowIndex, monthKey, gridType)}
         style={{ minHeight: '20px', cursor: 'default' }}
-        title={isForecast ? (t('forecast') || 'Pronóstico') : (t('expandToEditDetails') || 'Expandir para editar detalles individuales')}
+        title={isForecast ? (t('forecast') || 'Pronóstico') : (t('expandToEditDetails') || 'Doble click para editar o agregar datos')}
       >
         {displayValue}
       </div>
@@ -673,7 +706,7 @@ export default function Grid() {
                                                       setEditingDetail(null);
                                                     }
                                                   }}
-                                                  className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-center"
+                                                  className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-center [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                                                   style={{ minWidth: '85px' }}
                                                 />
                                               </td>

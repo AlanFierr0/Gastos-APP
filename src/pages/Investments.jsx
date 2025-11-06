@@ -180,11 +180,11 @@ export default function Investments() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm text-[#616f89]">{t('invested')}</label>
-              <input type="number" step="0.01" {...register('amount', { required: true })} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder="0.00" />
+              <input type="number" step="0.01" {...register('amount', { required: true })} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]" placeholder="0.00" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm text-[#616f89]">{t('currentValue')}</label>
-              <input type="number" step="0.01" {...register('value', { required: true })} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder="0.00" />
+              <input type="number" step="0.01" {...register('value', { required: true })} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]" placeholder="0.00" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm text-[#616f89]">{t('currency')}</label>

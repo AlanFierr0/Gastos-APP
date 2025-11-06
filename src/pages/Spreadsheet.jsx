@@ -139,7 +139,7 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
         onChange={(e) => setEditValue(e.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 border border-primary focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+        className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 border border-primary focus:outline-none focus:ring-2 focus:ring-primary text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
         autoFocus
       />
     );

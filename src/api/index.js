@@ -51,8 +51,8 @@ export async function previewExcel(formData) {
   return data;
 }
 
-export async function confirmImport(records) {
-  const { data } = await http.post('/upload/confirm', { records });
+export async function confirmImport(records, year) {
+  const { data } = await http.post('/upload/confirm', { records, year });
   return data;
 }
 
