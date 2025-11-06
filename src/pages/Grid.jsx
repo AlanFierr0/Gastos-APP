@@ -1,6 +1,49 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext.jsx';
-import { formatMoney } from '../utils/format.js';
+
+function formatMoneyNoDecimals(amount, currency = 'ARS', { sign = 'auto' } = {}) {
+  const num = Number(amount || 0);
+  const locale = currency === 'ARS' ? 'es-AR' : undefined;
+  const formatter = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  const formatted = formatter.format(Math.abs(num));
+  if (sign === 'none') return formatted;
+  if (sign === 'always') return (num < 0 ? '-' : '+') + formatted;
+  return (num < 0 ? '-' : '') + formatted;
+}
+
+function capitalizeFirst(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+function isForecastMonth(monthKey) {
+  // monthKey format: "YYYY-MM"
+  const [year, month] = monthKey.split('-').map(Number);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
+  
+  // If year is in the future, it's forecast
+  if (year > currentYear) return true;
+  // If year is in the past, it's not forecast
+  if (year < currentYear) return false;
+  // If same year, month >= current month is forecast
+  return month >= currentMonth;
+}
+
+function getLastPastMonthIndex(months) {
+  for (let i = months.length - 1; i >= 0; i--) {
+    if (!isForecastMonth(months[i])) {
+      return i;
+    }
+  }
+  return -1; // All months are forecast
+}
 
 function extractYearMonth(dateStr) {
   if (!dateStr) return null;
@@ -16,7 +59,8 @@ function extractYearMonth(dateStr) {
 
 function formatMonthYearLabel(year, month) {
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  return `${monthNames[month - 1]} ${year}`;
+  // Use shorter format: just month abbreviation if same year, or month + last 2 digits of year
+  return monthNames[month - 1];
 }
 
 export default function Grid() {
@@ -25,7 +69,9 @@ export default function Grid() {
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [expandedCategory, setExpandedCategory] = useState(null); // Category key that is expanded
+  const [editingDetail, setEditingDetail] = useState(null); // { recordId, monthKey, gridType, value }
   const [selectedYear, setSelectedYear] = useState(null); // null = all years, or specific year number
+  const [showForecast, setShowForecast] = useState(false); // Toggle para mostrar/ocultar forecast
   const gridRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -56,7 +102,7 @@ export default function Grid() {
     }
   }, [availableYears, selectedYear]);
 
-  // Get all unique months (filtered by selectedYear if set)
+  // Get all unique months (filtered by selectedYear if set, and forecast if toggle is off)
   const months = useMemo(() => {
     const monthSet = new Set();
     
@@ -67,6 +113,8 @@ export default function Grid() {
       // Filter by year if selectedYear is set
       if (selectedYear !== null && ym.year !== selectedYear) return;
       const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+      // Filter forecast months if toggle is off
+      if (!showForecast && isForecastMonth(monthKey)) return;
       monthSet.add(monthKey);
     });
 
@@ -77,12 +125,14 @@ export default function Grid() {
       // Filter by year if selectedYear is set
       if (selectedYear !== null && ym.year !== selectedYear) return;
       const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+      // Filter forecast months if toggle is off
+      if (!showForecast && isForecastMonth(monthKey)) return;
       monthSet.add(monthKey);
     });
 
     // Sort months ascending (January first, December last)
     return Array.from(monthSet).sort((a, b) => a.localeCompare(b));
-  }, [expenses, income, selectedYear]);
+  }, [expenses, income, selectedYear, showForecast]);
 
   // Process expenses data (filtered by selectedYear if set)
   const expensesGridData = useMemo(() => {
@@ -242,7 +292,10 @@ export default function Grid() {
     setEditingCell(null);
   };
 
-  const handleCellDoubleClick = (rowIndex, monthKey, gridType) => {
+  const handleCellDoubleClick = (rowIndex, monthKey, gridType, isTotal = false) => {
+    // Don't allow editing totals
+    if (isTotal) return;
+    
     const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
     const row = gridData[rowIndex];
     if (!row) return;
@@ -305,6 +358,38 @@ export default function Grid() {
     }
   };
 
+  const handleDetailDoubleClick = (record, monthKey, gridType) => {
+    const recordMonthKey = `${extractYearMonth(record.date)?.year}-${String(extractYearMonth(record.date)?.month).padStart(2, '0')}`;
+    if (recordMonthKey !== monthKey) return; // Only edit if the record matches this month
+    
+    setEditingDetail({ recordId: record.id, monthKey, gridType, value: String(record.amount || 0) });
+  };
+
+  const handleDetailSave = async () => {
+    if (!editingDetail) return;
+    
+    const { recordId, gridType, value } = editingDetail;
+    
+    try {
+      const numValue = parseFloat(String(value).replace(/[^\d.-]/g, ''));
+      if (isNaN(numValue) || numValue < 0) {
+        setEditingDetail(null);
+        return;
+      }
+
+      const updates = { amount: numValue };
+      if (gridType === 'expense') {
+        await updateExpense(recordId, updates);
+      } else {
+        await updateIncome(recordId, updates);
+      }
+    } catch (error) {
+      // Error saving silently ignored
+    } finally {
+      setEditingDetail(null);
+    }
+  };
+
   const handleKeyDown = (e, gridType) => {
     if (!selectedCell || selectedCell.gridType !== gridType) return;
 
@@ -359,11 +444,11 @@ export default function Grid() {
   };
 
   useEffect(() => {
-    if (editingCell && inputRef.current) {
+    if ((editingCell || editingDetail) && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [editingCell]);
+  }, [editingCell, editingDetail]);
 
   const renderCell = (row, monthKey, rowIndex, gridType) => {
     const isSelected = selectedCell?.rowIndex === rowIndex && selectedCell?.monthKey === monthKey && selectedCell?.gridType === gridType;
@@ -379,29 +464,33 @@ export default function Grid() {
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleSave}
           onKeyDown={(e) => handleKeyDown(e, gridType)}
-          className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-right"
-          style={{ minWidth: '100px' }}
+          className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-center"
+          style={{ minWidth: '85px' }}
         />
       );
     }
 
     const records = row.monthData[monthKey] || [];
     const totalAmount = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-    const displayValue = totalAmount !== 0 ? formatMoney(totalAmount, 'ARS', { sign: 'auto' }) : '-';
+    const displayValue = totalAmount !== 0 ? formatMoneyNoDecimals(totalAmount, 'ARS', { sign: 'auto' }) : '-';
+    const isForecast = isForecastMonth(monthKey);
 
     return (
       <div
-        className={`px-2 py-1 text-sm text-right ${isSelected ? 'bg-blue-200 dark:bg-blue-800/50' : 'hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
+        className={`px-1 py-0.5 text-sm text-center ${isSelected ? 'bg-blue-200 dark:bg-blue-800/50' : 'hover:bg-amber-100 dark:hover:bg-amber-900/30'} ${isForecast ? 'opacity-60 italic' : ''}`}
         onClick={() => handleCellClick(rowIndex, monthKey, gridType)}
-        onDoubleClick={() => handleCellDoubleClick(rowIndex, monthKey, gridType)}
-        style={{ minHeight: '24px', cursor: 'cell' }}
+        style={{ minHeight: '20px', cursor: 'default' }}
+        title={isForecast ? (t('forecast') || 'Pronóstico') : (t('expandToEditDetails') || 'Expandir para editar detalles individuales')}
       >
         {displayValue}
       </div>
     );
   };
 
-  const renderGrid = (gridData, rowTotals, monthTotals, gridType, title) => (
+  const renderGrid = (gridData, rowTotals, monthTotals, gridType, title) => {
+    const lastPastMonthIndex = getLastPastMonthIndex(months);
+    
+    return (
     <div className="mb-8">
       <div className="mb-2">
         <h2 className="text-2xl font-bold">{title}</h2>
@@ -411,26 +500,29 @@ export default function Grid() {
         className="border-2 border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 overflow-x-auto"
         onKeyDown={(e) => handleKeyDown(e, gridType)}
         tabIndex={0}
+        style={{ maxWidth: '100%' }}
       >
         <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
           <thead className="sticky top-0 bg-blue-50 dark:bg-blue-900/20 z-10">
             <tr>
-              <th className="sticky left-0 border-2 border-blue-300 dark:border-blue-700 px-2 py-2 text-left text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 z-20" style={{ width: 200, minWidth: 200 }}>
+              <th className="sticky left-0 border-2 border-blue-300 dark:border-blue-700 px-1.5 py-1.5 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 z-20" style={{ width: 100, minWidth: 100 }}>
                 {gridType === 'expense' ? (t('category') || 'Categoría') : (t('concept') || 'Concepto')}
               </th>
-              {months.map((monthKey) => {
+              {months.map((monthKey, index) => {
                 const [year, month] = monthKey.split('-').map(Number);
+                const isLastPastMonth = index === lastPastMonthIndex;
                 return (
                   <th
                     key={monthKey}
-                    className="border-2 border-blue-300 dark:border-blue-700 px-2 py-2 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20"
-                    style={{ width: 120, minWidth: 120 }}
+                    className={`border-2 border-blue-300 dark:border-blue-700 px-1 py-1 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                    style={{ width: 85, minWidth: 85 }}
+                    title={`${formatMonthYearLabel(year, month)} ${year}`}
                   >
                     {formatMonthYearLabel(year, month)}
                   </th>
                 );
               })}
-              <th className="border-2 border-blue-300 dark:border-blue-700 px-2 py-2 text-right text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20" style={{ width: 120, minWidth: 120 }}>
+              <th className="border-2 border-blue-300 dark:border-blue-700 px-1.5 py-1.5 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20" style={{ width: 95, minWidth: 95 }}>
                 {t('total') || 'Total'}
               </th>
             </tr>
@@ -451,44 +543,47 @@ export default function Grid() {
                     } hover:bg-amber-50/50 dark:hover:bg-amber-900/20`}
                   >
                     <td 
-                      className="sticky left-0 border-r-2 border-gray-400 dark:border-gray-500 px-2 py-1 text-sm bg-white dark:bg-gray-900 z-10 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30" 
-                      style={{ width: 200, minWidth: 200 }}
+                      className="sticky left-0 border-r-2 border-gray-400 dark:border-gray-500 px-1.5 py-1 text-xs bg-white dark:bg-gray-900 z-10 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30" 
+                      style={{ width: 100, minWidth: 100 }}
                       onClick={(e) => {
                         e.stopPropagation();
                         const expandedKey = `${gridType}-${row.key}`;
                         setExpandedCategory(expandedCategory === expandedKey ? null : expandedKey);
                       }}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-xs" style={{ transform: expandedCategory === `${gridType}-${row.key}` ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                      <div className="relative flex items-center justify-center">
+                        <span className="material-symbols-outlined text-xs absolute left-0" style={{ transform: expandedCategory === `${gridType}-${row.key}` ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
                           chevron_right
                         </span>
-                        {row.key}
+                        <span className="truncate">{capitalizeFirst(row.key)}</span>
                       </div>
                     </td>
-                    {months.map((monthKey) => (
-                      <td
-                        key={monthKey}
-                        className="border-r-2 border-gray-300 dark:border-gray-600 p-0"
-                        style={{ width: 120, minWidth: 120 }}
-                      >
-                        {renderCell(row, monthKey, rowIndex, gridType)}
-                      </td>
-                    ))}
-                    <td className="border-l-2 border-gray-400 dark:border-gray-500 px-2 py-1 text-sm text-right font-semibold bg-white dark:bg-gray-900" style={{ width: 120, minWidth: 120 }}>
-                      {formatMoney(rowTotals.get(row.key) || 0, 'ARS', { sign: 'auto' })}
+                    {months.map((monthKey, index) => {
+                      const isLastPastMonth = index === lastPastMonthIndex;
+                      return (
+                        <td
+                          key={monthKey}
+                          className={`border-r-2 border-gray-300 dark:border-gray-600 p-0 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                          style={{ width: 85, minWidth: 85 }}
+                        >
+                          {renderCell(row, monthKey, rowIndex, gridType)}
+                        </td>
+                      );
+                    })}
+                    <td className="border-l-2 border-gray-400 dark:border-gray-500 px-1.5 py-1 text-sm text-center font-semibold bg-white dark:bg-gray-900" style={{ width: 95, minWidth: 95 }}>
+                      {formatMoneyNoDecimals(rowTotals.get(row.key) || 0, 'ARS', { sign: 'auto' })}
                     </td>
                   </tr>
                   {expandedCategory === `${gridType}-${row.key}` && (
                     <tr>
                       <td colSpan={months.length + 2} className="border border-gray-200 dark:border-gray-700 p-0 bg-gray-50 dark:bg-gray-800/50">
                         <div className="p-4">
-                          <h4 className="font-semibold text-sm mb-3">{t('details') || 'Detalles'} - {row.key}</h4>
+                          <h4 className="font-semibold text-sm mb-3">{t('details') || 'Detalles'} - {capitalizeFirst(row.key)}</h4>
                           <div className="overflow-x-auto border border-gray-300 dark:border-gray-700 rounded-lg">
                             <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
                               <thead className="bg-indigo-100 dark:bg-indigo-900/40">
                                 <tr>
-                                  <th className="sticky left-0 border-2 border-indigo-300 dark:border-indigo-700 px-2 py-2 text-left text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40 z-20" style={{ width: 200, minWidth: 200 }}>
+                                  <th className="sticky left-0 border-2 border-indigo-300 dark:border-indigo-700 px-1.5 py-1.5 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40 z-20" style={{ width: 100, minWidth: 100 }}>
                                     {t('concept') || 'Concepto'}
                                   </th>
                                   {months.map((monthKey) => {
@@ -496,14 +591,15 @@ export default function Grid() {
                                     return (
                                       <th
                                         key={monthKey}
-                                        className="border-2 border-indigo-300 dark:border-indigo-700 px-2 py-2 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40"
-                                        style={{ width: 100, minWidth: 100 }}
+                                        className="border-2 border-indigo-300 dark:border-indigo-700 px-1 py-1 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40"
+                                        style={{ width: 85, minWidth: 85 }}
+                                        title={`${formatMonthYearLabel(year, month)} ${year}`}
                                       >
                                         {formatMonthYearLabel(year, month)}
                                       </th>
                                     );
                                   })}
-                                  <th className="border-2 border-indigo-300 dark:border-indigo-700 px-2 py-2 text-right text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40" style={{ width: 100, minWidth: 100 }}>
+                                  <th className="border-2 border-indigo-300 dark:border-indigo-700 px-1.5 py-1.5 text-right text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40" style={{ width: 90, minWidth: 90 }}>
                                     {t('total') || 'Total'}
                                   </th>
                                 </tr>
@@ -539,29 +635,71 @@ export default function Grid() {
                                     new Set(concept.records.map(r => r.type)).size > 1;
                                     return (
                                         <tr key={`concept-${idx}`} className="border-b-2 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20">
-                                        <td className="sticky left-0 border-r-2 border-indigo-300 dark:border-indigo-600 px-2 py-1 text-sm bg-white dark:bg-gray-900 z-10" style={{ width: 200, minWidth: 200 }}>
-                                          <div className="flex items-center gap-2">
-                                            <span className="truncate">{concept.label}</span>
+                                        <td className="sticky left-0 border-r-2 border-indigo-300 dark:border-indigo-600 px-1.5 py-1 text-xs text-center bg-white dark:bg-gray-900 z-10" style={{ width: 100, minWidth: 100 }}>
+                                          <div className="flex items-center justify-center gap-1">
+                                            <span className="truncate">{capitalizeFirst(concept.label)}</span>
                                           </div>
                                         </td>
-                                        {months.map((monthKey) => {
+                                        {months.map((monthKey, index) => {
+                                          // Find all records for this concept and month
+                                          const monthRecords = concept.records.filter(r => r.monthKey === monthKey);
+                                          const isForecast = isForecastMonth(monthKey);
+                                          const isLastPastMonth = index === lastPastMonthIndex;
+                                          
+                                          // Check if any record in this cell is being edited
+                                          const editingRecord = monthRecords.find(r => editingDetail?.recordId === r.id && editingDetail?.monthKey === monthKey);
+                                          const isEditing = !!editingRecord;
+                                          
+                                          if (isEditing && editingRecord) {
+                                            return (
+                                              <td
+                                                key={monthKey}
+                                                className={`border-r-2 border-indigo-200 dark:border-indigo-700 p-0 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                                                style={{ width: 85, minWidth: 85 }}
+                                              >
+                                                <input
+                                                  ref={inputRef}
+                                                  type="number"
+                                                  step="0.01"
+                                                  value={editingDetail.value}
+                                                  onChange={(e) => setEditingDetail({ ...editingDetail, value: e.target.value })}
+                                                  onBlur={handleDetailSave}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                      e.preventDefault();
+                                                      handleDetailSave();
+                                                    } else if (e.key === 'Escape') {
+                                                      e.preventDefault();
+                                                      setEditingDetail(null);
+                                                    }
+                                                  }}
+                                                  className="w-full h-full px-1 py-0.5 border-2 border-blue-500 bg-white dark:bg-gray-800 text-sm focus:outline-none text-center"
+                                                  style={{ minWidth: '85px' }}
+                                                />
+                                              </td>
+                                            );
+                                          }
+                                          
                                           // Sum all amounts for this concept in this month
-                                          const monthAmount = concept.records
-                                            .filter(r => r.monthKey === monthKey)
-                                            .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+                                          const monthAmount = monthRecords.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+                                          
+                                          // If there are records, make the first one editable
+                                          const firstRecord = monthRecords[0];
                                           
                                           return (
                                             <td
                                               key={monthKey}
-                                              className="border-r-2 border-indigo-200 dark:border-indigo-700 px-2 py-1 text-sm text-right"
-                                              style={{ width: 100, minWidth: 100 }}
+                                              className={`border-r-2 border-indigo-200 dark:border-indigo-700 px-1 py-1 text-sm text-center ${firstRecord ? 'hover:bg-indigo-100 dark:hover:bg-indigo-900/30 cursor-cell' : ''} ${isForecast ? 'opacity-60 italic' : ''} ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                                              style={{ width: 85, minWidth: 85 }}
+                                              onDoubleClick={() => firstRecord && handleDetailDoubleClick(firstRecord, monthKey, gridType)}
+                                              title={firstRecord ? (isForecast ? (t('forecast') || 'Pronóstico') : (t('doubleClickToEdit') || 'Doble click para editar')) : ''}
                                             >
-                                              {monthAmount !== 0 ? formatMoney(monthAmount, 'ARS', { sign: 'auto' }) : '-'}
+                                              {monthAmount !== 0 ? formatMoneyNoDecimals(monthAmount, 'ARS', { sign: 'auto' }) : '-'}
                                             </td>
                                           );
                                         })}
-                                        <td className="border-l-2 border-indigo-300 dark:border-indigo-600 px-2 py-1 text-sm text-right font-semibold bg-indigo-50 dark:bg-indigo-900/20" style={{ width: 100, minWidth: 100 }}>
-                                          {formatMoney(conceptTotal, 'ARS', { sign: 'auto' })}
+                                        <td className="border-l-2 border-indigo-300 dark:border-indigo-600 px-1.5 py-1 text-sm text-center font-semibold bg-indigo-50 dark:bg-indigo-900/20" style={{ width: 95, minWidth: 95 }}>
+                                          {formatMoneyNoDecimals(conceptTotal, 'ARS', { sign: 'auto' })}
                                         </td>
                                       </tr>
                                     );
@@ -570,7 +708,7 @@ export default function Grid() {
                               </tbody>
                               <tfoot className="bg-indigo-200 dark:bg-indigo-900/50">
                                 <tr>
-                                  <td className="sticky left-0 border-2 border-indigo-400 dark:border-indigo-600 px-2 py-2 text-sm font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50 z-20" style={{ width: 200, minWidth: 200 }}>
+                                  <td className="sticky left-0 border-2 border-indigo-400 dark:border-indigo-600 px-1.5 py-1.5 text-xs text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50 z-20" style={{ width: 100, minWidth: 100 }}>
                                     {t('total') || 'Total'}
                                   </td>
                                   {months.map((monthKey) => {
@@ -580,15 +718,15 @@ export default function Grid() {
                                     return (
                                       <td
                                         key={monthKey}
-                                        className="border-2 border-indigo-400 dark:border-indigo-600 px-2 py-2 text-sm text-right font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50"
-                                        style={{ width: 100, minWidth: 100 }}
+                                        className="border-2 border-indigo-400 dark:border-indigo-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50"
+                                        style={{ width: 85, minWidth: 85 }}
                                       >
-                                        {formatMoney(monthTotal, 'ARS', { sign: 'auto' })}
+                                        {formatMoneyNoDecimals(monthTotal, 'ARS', { sign: 'auto' })}
                                       </td>
                                     );
                                   })}
-                                  <td className="border-2 border-indigo-400 dark:border-indigo-600 px-2 py-2 text-sm text-right font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50" style={{ width: 100, minWidth: 100 }}>
-                                    {formatMoney(rowTotals.get(row.key) || 0, 'ARS', { sign: 'auto' })}
+                                  <td className="border-2 border-indigo-400 dark:border-indigo-600 px-1.5 py-1.5 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50" style={{ width: 95, minWidth: 95 }}>
+                                    {formatMoneyNoDecimals(rowTotals.get(row.key) || 0, 'ARS', { sign: 'auto' })}
                                   </td>
                                 </tr>
                               </tfoot>
@@ -604,27 +742,31 @@ export default function Grid() {
           </tbody>
           <tfoot className="sticky bottom-0 bg-white dark:bg-gray-900 z-10">
             <tr>
-              <td className="sticky left-0 border-2 border-gray-400 dark:border-gray-600 px-2 py-2 text-sm font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 z-20" style={{ width: 200, minWidth: 200 }}>
+              <td className="sticky left-0 border-2 border-gray-400 dark:border-gray-600 px-1.5 py-1.5 text-xs text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 z-20" style={{ width: 100, minWidth: 100 }}>
                 {t('total') || 'Total'}
               </td>
-              {months.map((monthKey) => (
-                <td
-                  key={monthKey}
-                  className="border-2 border-gray-400 dark:border-gray-600 px-2 py-2 text-sm text-right font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900"
-                  style={{ width: 120, minWidth: 120 }}
-                >
-                  {formatMoney(monthTotals.get(monthKey) || 0, 'ARS', { sign: 'auto' })}
-                </td>
-              ))}
-              <td className="border-2 border-gray-400 dark:border-gray-600 px-2 py-2 text-sm text-right font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900" style={{ width: 120, minWidth: 120 }}>
-                {formatMoney(Array.from(monthTotals.values()).reduce((sum, val) => sum + val, 0), 'ARS', { sign: 'auto' })}
+              {months.map((monthKey, index) => {
+                const isLastPastMonth = index === lastPastMonthIndex;
+                return (
+                  <td
+                    key={monthKey}
+                    className={`border-2 border-gray-400 dark:border-gray-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                    style={{ width: 85, minWidth: 85 }}
+                  >
+                    {formatMoneyNoDecimals(monthTotals.get(monthKey) || 0, 'ARS', { sign: 'auto' })}
+                  </td>
+                );
+              })}
+              <td className="border-2 border-gray-400 dark:border-gray-600 px-1.5 py-1.5 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900" style={{ width: 95, minWidth: 95 }}>
+                {formatMoneyNoDecimals(Array.from(monthTotals.values()).reduce((sum, val) => sum + val, 0), 'ARS', { sign: 'auto' })}
               </td>
             </tr>
           </tfoot>
         </table>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -634,23 +776,46 @@ export default function Grid() {
             <p className="text-4xl font-black tracking-[-0.033em]">{t('grid') || 'Grilla'}</p>
             <p className="text-[#616f89] dark:text-gray-400">{t('gridSubtitle') || 'Visualización tipo Excel de todos los registros'}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="year-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('year') || 'Año'}:
-            </label>
-            <select
-              id="year-select"
-              value={selectedYear || ''}
-              onChange={(e) => setSelectedYear(e.target.value === '' ? null : Number(e.target.value))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-            >
-              <option value="">{t('allYears') || 'Todos los años'}</option>
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label htmlFor="year-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('year') || 'Año'}:
+              </label>
+              <select
+                id="year-select"
+                value={selectedYear || ''}
+                onChange={(e) => setSelectedYear(e.target.value === '' ? null : Number(e.target.value))}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+              >
+                <option value="">{t('allYears') || 'Todos los años'}</option>
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="forecast-toggle" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('showForecast') || 'Mostrar Forecast'}:
+              </label>
+              <button
+                id="forecast-toggle"
+                type="button"
+                onClick={() => setShowForecast(!showForecast)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                  showForecast ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+                role="switch"
+                aria-checked={showForecast}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showForecast ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
       </div>

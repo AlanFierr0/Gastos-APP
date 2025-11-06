@@ -50,6 +50,15 @@ export const dictionaries = {
     // Analysis page
     analysisTitle: 'Financial Analysis',
     analysisSubtitle: 'Comparatives by month and category.',
+    financialAnalysis: 'Financial Analysis',
+    financialAnalysisSubtitle: 'Configure buckets and compare against targets (over expenses).',
+    categoriesConfig: 'Categories configuration',
+    fixedExpense: 'Fixed expense',
+    wellbeing: 'Wellbeing',
+    saving: 'Saving',
+    target: 'Target',
+    yearlyBreakdown: 'Yearly breakdown',
+    currentYearDeviation: 'Current year deviation',
     incomeVsExpenses6m: 'Income vs. Expenses (last 6 months)',
     // Upload page
     uploadTitle: 'Import Your Expense History',
@@ -150,6 +159,13 @@ export const dictionaries = {
     update: 'Update',
     save: 'Save',
     close: 'Close',
+    forecast: 'Forecast',
+    showForecast: 'Show Forecast',
+    expandToEditDetails: 'Expand to edit individual details',
+    doubleClickToEdit: 'Double click to edit',
+    total: 'Total',
+    forecastWarning: 'This is a forecast period',
+    forecastWarningMessage: 'There is no real data for this period. The values shown are forecasts.',
   },
   es: {
     appName: 'Gastos APP',
@@ -202,6 +218,15 @@ export const dictionaries = {
     // Analysis page
     analysisTitle: 'Análisis Financiero',
     analysisSubtitle: 'Comparativos por mes y categoría.',
+    financialAnalysis: 'Análisis Financiero',
+    financialAnalysisSubtitle: 'Configurar buckets y comparar contra objetivos (sobre gastos).',
+    categoriesConfig: 'Configuración de categorías',
+    fixedExpense: 'Gasto fijo',
+    wellbeing: 'Bienestar',
+    saving: 'Ahorro',
+    target: 'Objetivo',
+    yearlyBreakdown: 'Desglose anual',
+    currentYearDeviation: 'Desvío año actual',
     incomeVsExpenses6m: 'Ingresos vs. Gastos (últimos 6 meses)',
     // Upload page
     uploadTitle: 'Importá tu historial de gastos',
@@ -302,11 +327,19 @@ export const dictionaries = {
     update: 'Actualizar',
     save: 'Guardar',
     close: 'Cerrar',
+    forecast: 'Pronóstico',
+    showForecast: 'Mostrar Forecast',
+    expandToEditDetails: 'Expandir para editar detalles individuales',
+    doubleClickToEdit: 'Doble click para editar',
+    total: 'Total',
+    forecastWarning: 'Este es un mes pronóstico',
+    forecastWarningMessage: 'No hay datos reales para este período. Los valores mostrados son pronósticos.',
   },
 };
 
 export function translate(locale, key) {
-  const dict = dictionaries[locale] || dictionaries.en;
+  // Always return Spanish translations
+  const dict = dictionaries.es;
   return dict[key] ?? key;
 }
 

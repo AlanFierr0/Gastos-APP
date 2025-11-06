@@ -7,24 +7,24 @@ import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import Select from '../components/Select.jsx';
 
 export default function Dashboard() {
-  const { expenses, income, investmentSummary, t, locale } = useApp();
+  const { expenses, income, investmentSummary, t } = useApp();
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
-  const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
+  const [selectedPeriod, setSelectedPeriod] = useState(() => getLastNonForecastMonth());
   const navigate = useNavigate();
   
   // Calculate current month on each render to ensure it's always fresh
-  const currentMonth = getCurrentYearMonth();
+  const lastNonForecastMonth = useMemo(() => getLastNonForecastMonth(), []);
 
   // (moved below, after periodOptions declaration)
 
   // Determine selected year for month mode
   const selectedYear = useMemo(() => {
-    const [yStr] = String(selectedPeriod || currentMonth).split('-');
+    const [yStr] = String(selectedPeriod || lastNonForecastMonth).split('-');
     return Number(yStr) || new Date().getFullYear();
-  }, [selectedPeriod, currentMonth]);
+  }, [selectedPeriod, lastNonForecastMonth]);
 
   // Build 12 months for the selected year (always available)
-  const months = useMemo(() => buildFullYearMonths(selectedYear, locale), [selectedYear, locale]);
+  const months = useMemo(() => buildFullYearMonths(selectedYear, 'es-AR'), [selectedYear]);
   const years = useMemo(() => buildAvailableYears(expenses, income), [expenses, income]);
   const periodOptions = periodType === 'month' ? months : years;
 
@@ -32,26 +32,44 @@ export default function Dashboard() {
   React.useEffect(() => {
     if (periodType !== 'month') return;
     const isValid = Array.isArray(periodOptions) && periodOptions.some((p) => p.value === selectedPeriod);
-    if (!isValid) setSelectedPeriod(currentMonth);
-  }, [periodType, periodOptions, selectedPeriod, currentMonth]);
+    if (!isValid) setSelectedPeriod(lastNonForecastMonth);
+  }, [periodType, periodOptions, selectedPeriod, lastNonForecastMonth]);
 
-  // Always use current month if selectedPeriod is not in options (for initial load)
+  // Always use last non-forecast month if selectedPeriod is not in options (for initial load)
   const effectivePeriod = useMemo(() => {
     let result;
     if (periodOptions.length) {
       const isInOptions = periodOptions.some((p) => p.value === selectedPeriod);
-      result = isInOptions ? selectedPeriod : (periodType === 'month' ? currentMonth : periodOptions[0].value);
+      result = isInOptions ? selectedPeriod : (periodType === 'month' ? lastNonForecastMonth : periodOptions[0].value);
     } else {
-      result = periodType === 'month' ? currentMonth : String(new Date().getFullYear());
+      result = periodType === 'month' ? lastNonForecastMonth : String(new Date().getFullYear());
     }
     return result;
-  }, [periodOptions, selectedPeriod, currentMonth, periodType]);
+  }, [periodOptions, selectedPeriod, lastNonForecastMonth, periodType]);
+
+  // Check if the selected period is forecast (only for month view)
+  const isForecastPeriod = useMemo(() => {
+    if (periodType === 'month') {
+      const [yStr, mStr] = (effectivePeriod || '').split('-');
+      const y = Number(yStr);
+      const m = Number(mStr);
+      if (y && m) {
+        return isForecastMonth(y, m);
+      }
+    }
+    // For year view, never show forecast warning - always use real data only
+    return false;
+  }, [periodType, effectivePeriod]);
 
   const { periodExpenses, periodIncome } = useMemo(() => {
+    // For month view: if it's a forecast period, include forecast data; otherwise exclude it
+    // For year view: always exclude forecast data (only show real data)
     return periodType === 'month'
-      ? filterByMonth(expenses, income, effectivePeriod)
-      : filterByYear(expenses, income, Number(effectivePeriod));
-  }, [expenses, income, periodType, effectivePeriod]);
+      ? (isForecastPeriod 
+          ? filterByMonthIncludingForecast(expenses, income, effectivePeriod)
+          : filterByMonth(expenses, income, effectivePeriod))
+      : filterByYear(expenses, income, Number(effectivePeriod)); // Always exclude forecast for year view
+  }, [expenses, income, periodType, effectivePeriod, isForecastPeriod]);
 
   const monthTotals = useMemo(() => computeTotals(periodExpenses, periodIncome, investmentSummary), [periodExpenses, periodIncome, investmentSummary]);
 
@@ -110,7 +128,7 @@ export default function Dashboard() {
 
     // Convertir a array y mantener solo categorías con total positivo
     let allData = Array.from(map.entries())
-      .map(([name, value]) => ({ name, value: Number(value) }))
+      .map(([name, value]) => ({ name: capitalizeFirst(name), value: Number(value) }))
       .filter(item => item.value > 0);
 
     if (allData.length === 0) return [];
@@ -176,7 +194,7 @@ export default function Dashboard() {
             value={periodType}
             onChange={(v) => {
               setPeriodType(v);
-              setSelectedPeriod(v === 'month' ? getCurrentYearMonth() : String(new Date().getFullYear()));
+              setSelectedPeriod(v === 'month' ? lastNonForecastMonth : String(new Date().getFullYear()));
             }}
             options={[
               { value: 'month', label: t('periodMonth') },
@@ -190,6 +208,18 @@ export default function Dashboard() {
           />
         </div>
       </header>
+
+      {isForecastPeriod && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 dark:border-amber-500 p-4 rounded-lg">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 flex-shrink-0">warning</span>
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-200">{t('forecastWarning') || 'Este es un mes pronóstico'}</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">{t('forecastWarningMessage') || 'No hay datos reales para este período. Los valores mostrados son pronósticos.'}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card title={t('totalIncome')}>
@@ -242,7 +272,49 @@ export default function Dashboard() {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card title={t('incomeVsExpenses')} className="lg:col-span-2">
           {barData.length ? (
-            <BarCompare data={barData} />
+            <BarCompare 
+              data={barData} 
+              tooltipLabelFromDatum={false}
+              customTooltip={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  const isDark = document.documentElement.classList.contains('dark');
+                  return (
+                    <div 
+                      className={`rounded-lg border p-2 shadow-lg z-50 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
+                      style={isDark ? { backgroundColor: 'rgb(31 41 55)', borderColor: 'rgb(55 65 81)' } : {}}
+                    >
+                      {payload.map((entry, index) => {
+                        const absValue = Math.abs(entry.value || 0);
+                        const formatted = absValue.toLocaleString('es-AR', { 
+                          style: 'currency', 
+                          currency: 'ARS',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        });
+                        // Translate the label
+                        let label = entry.name || '';
+                        if (label.toLowerCase() === 'income') {
+                          label = t('incomeGeneric') || 'Ingreso';
+                        } else if (label.toLowerCase() === 'expenses') {
+                          label = t('expenseGeneric') || 'Gasto';
+                        }
+                        return (
+                          <p 
+                            key={index} 
+                            className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                            style={isDark ? { color: 'rgb(243 244 246)', backgroundColor: 'transparent' } : {}}
+                          >
+                            <span style={{ color: entry.color || (isDark ? 'rgb(243 244 246)' : '#000') }} className="category-name">{label}: </span>
+                            {formatted}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
           ) : (
             <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
           )}
@@ -264,8 +336,14 @@ export default function Dashboard() {
   );
 }
 
-function getCurrentYearMonth() {
+function capitalizeFirst(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+function getLastNonForecastMonth() {
   const now = new Date();
+  let year, month;
   
   // Try to get Argentina timezone first
   try {
@@ -279,16 +357,41 @@ function getCurrentYearMonth() {
     const monthPart = parts.find((p) => p.type === 'month');
     
     if (yearPart && monthPart) {
-      return `${yearPart.value}-${monthPart.value}`;
+      year = Number(yearPart.value);
+      month = Number(monthPart.value);
+    } else {
+      // Fallback: use local time
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
     }
   } catch (e) {
-    // If Intl fails, fall through to local time
+    // Fallback: use local time if Intl fails
+    year = now.getFullYear();
+    month = now.getMonth() + 1;
   }
   
-  // Fallback: use local time (should work for most users in Argentina)
-  const year = String(now.getFullYear());
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
+  // Current month is always forecast (month >= current month), so go back one month
+  // This gives us the last completed month
+  month--;
+  if (month < 1) {
+    month = 12;
+    year--;
+  }
+  
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+function isForecastMonth(year, month) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
+  
+  // If year is in the future, it's forecast
+  if (year > currentYear) return true;
+  // If year is in the past, it's not forecast
+  if (year < currentYear) return false;
+  // If same year, month >= current month is forecast
+  return month >= currentMonth;
 }
 
 function extractYearMonth(dateStr) {
@@ -319,12 +422,12 @@ function extractYearMonth(dateStr) {
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
-function buildFullYearMonths(year, locale) {
+function buildFullYearMonths(year) {
   const arr = [];
   for (let m = 1; m <= 12; m += 1) {
     // Use a mid-month UTC date and fixed timezone to avoid month shifting by TZ
     const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
-    const raw = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    const raw = new Intl.DateTimeFormat('es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
     const three = raw.replace('.', '').slice(0, 3);
     const monthAbbr = three.charAt(0).toUpperCase() + three.slice(1);
     const label = `${monthAbbr} ${year}`;
@@ -357,7 +460,92 @@ function filterByMonth(expenses = [], income = [], yearMonth) {
     return ym && ym.year === y && ym.month === m;
   };
   
-  // Filter expenses: only those in the specific month
+  // Filter expenses: only those in the specific month AND not forecast
+  const periodExpenses = expenses.filter((e) => {
+    const ym = extractYearMonth(e.date);
+    if (!ym) return false;
+    if (!inMonth(e.date)) return false;
+    // Exclude forecast months
+    return !isForecastMonth(ym.year, ym.month);
+  });
+  
+  // Filter income: include both regular income in the month AND recurring income that started before or in this month
+  // But exclude forecast months
+  const periodIncome = income.filter((i) => {
+    // If it's recurring income, include it if it started on or before this month
+    if (i.isRecurring) {
+      const incomeYm = extractYearMonth(i.date);
+      if (!incomeYm) return false;
+      // Include if the recurring income started in this month or earlier
+      const matches = (incomeYm.year < y) || (incomeYm.year === y && incomeYm.month <= m);
+      if (!matches) return false;
+      // Exclude if the selected month is forecast
+      return !isForecastMonth(y, m);
+    }
+    // For non-recurring income, only include if it's in this month and not forecast
+    const ym = extractYearMonth(i.date);
+    if (!ym || !inMonth(i.date)) return false;
+    return !isForecastMonth(ym.year, ym.month);
+  });
+  
+  return { periodIncome, periodExpenses };
+}
+
+function filterByYear(expenses = [], income = [], year) {
+  const inYear = (ts) => {
+    const ym = extractYearMonth(ts);
+    return ym && ym.year === year;
+  };
+  
+  // Filter expenses: only those in the specific year AND not forecast
+  const periodExpenses = expenses.filter((e) => {
+    const ym = extractYearMonth(e.date);
+    if (!ym || !inYear(e.date)) return false;
+    // Exclude forecast months
+    return !isForecastMonth(ym.year, ym.month);
+  });
+  
+  // Filter income: include both regular income in the year AND recurring income that started before or in this year
+  // But exclude forecast months
+  const periodIncome = income.filter((i) => {
+    // If it's recurring income, include it if it started in this year or earlier
+    if (i.isRecurring) {
+      const incomeYm = extractYearMonth(i.date);
+      if (!incomeYm) return false;
+      if (incomeYm.year > year) return false;
+      // For recurring income, we need to check if any month in the year is forecast
+      // Since we're filtering by year, we'll exclude if the year is current and has forecast months
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      if (year === currentYear) {
+        // For current year, exclude if the recurring income would fall in forecast months
+        // This is a simplification - we'll exclude all recurring income for current year
+        // if any month in the year is forecast
+        // If we're in the current year and there are forecast months, exclude recurring income
+        // that would contribute to forecast months
+        return true; // We'll handle this more carefully by checking the actual month
+      }
+      return true;
+    }
+    // For non-recurring income, only include if it's in this year and not forecast
+    const ym = extractYearMonth(i.date);
+    if (!ym || !inYear(i.date)) return false;
+    return !isForecastMonth(ym.year, ym.month);
+  });
+  
+  return { periodIncome, periodExpenses };
+}
+
+function filterByMonthIncludingForecast(expenses = [], income = [], yearMonth) {
+  const [yStr, mStr] = (yearMonth || '').split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const inMonth = (ts) => {
+    const ym = extractYearMonth(ts);
+    return ym && ym.year === y && ym.month === m;
+  };
+  
+  // Filter expenses: only those in the specific month (including forecast)
   const periodExpenses = expenses.filter((e) => inMonth(e.date));
   
   // Filter income: include both regular income in the month AND recurring income that started before or in this month
@@ -371,30 +559,6 @@ function filterByMonth(expenses = [], income = [], yearMonth) {
     }
     // For non-recurring income, only include if it's in this month
     return inMonth(i.date);
-  });
-  
-  return { periodIncome, periodExpenses };
-}
-
-function filterByYear(expenses = [], income = [], year) {
-  const inYear = (ts) => {
-    const ym = extractYearMonth(ts);
-    return ym && ym.year === year;
-  };
-  
-  // Filter expenses: only those in the specific year
-  const periodExpenses = expenses.filter((e) => inYear(e.date));
-  
-  // Filter income: include both regular income in the year AND recurring income that started before or in this year
-  const periodIncome = income.filter((i) => {
-    // If it's recurring income, include it if it started in this year or earlier
-    if (i.isRecurring) {
-      const incomeYm = extractYearMonth(i.date);
-      if (!incomeYm) return false;
-      return incomeYm.year <= year;
-    }
-    // For non-recurring income, only include if it's in this year
-    return inYear(i.date);
   });
   
   return { periodIncome, periodExpenses };

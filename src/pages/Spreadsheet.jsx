@@ -181,7 +181,7 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
 }
 
 export default function Spreadsheet() {
-  const { expenses, income, t, locale } = useApp();
+  const { expenses, income, t } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -202,7 +202,7 @@ export default function Spreadsheet() {
   }, [selectedPeriod, currentMonth]);
   
   // Build 12 months for the selected year (always available)
-  const months = useMemo(() => buildFullYearMonths(selectedYear, locale), [selectedYear, locale]);
+  const months = useMemo(() => buildFullYearMonths(selectedYear, 'es-AR'), [selectedYear]);
   const years = useMemo(() => buildAvailableYears(expenses, income), [expenses, income]);
   const periodOptions = periodType === 'month' ? months : years;
   
@@ -316,7 +316,7 @@ export default function Spreadsheet() {
     try {
       const d = value instanceof Date ? value : new Date(value);
       if (Number.isNaN(d.getTime())) return String(value || '');
-      const mf = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', year: 'numeric' });
+      const mf = new Intl.DateTimeFormat('es-AR', { month: 'short', year: 'numeric' });
       const out = mf.format(d);
       return out.charAt(0).toUpperCase() + out.slice(1);
     } catch {
@@ -602,12 +602,12 @@ function extractYearMonth(dateStr) {
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
-function buildFullYearMonths(year, locale) {
+function buildFullYearMonths(year) {
   const arr = [];
   for (let m = 1; m <= 12; m += 1) {
     // Use a mid-month UTC date and fixed timezone to avoid month shifting by TZ
     const date = new Date(Date.UTC(year, m - 1, 15, 12, 0, 0));
-    const raw = new Intl.DateTimeFormat(locale || 'es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
+    const raw = new Intl.DateTimeFormat('es-AR', { month: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(date);
     const three = raw.replace('.', '').slice(0, 3);
     const monthAbbr = three.charAt(0).toUpperCase() + three.slice(1);
     const label = `${monthAbbr} ${year}`;

@@ -32,6 +32,10 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">trending_up</span>
           <span className="text-sm font-medium">{t('investments')}</span>
         </NavLink>
+        <NavLink className={linkClass} to="/analysis">
+          <span className="material-symbols-outlined">monitoring</span>
+          <span className="text-sm font-medium">{t('financialAnalysis') || 'Análisis'}</span>
+        </NavLink>
         <NavLink className={linkClass} to="/upload">
           <span className="material-symbols-outlined">file_upload</span>
           <span className="text-sm font-medium">{t('upload')}</span>

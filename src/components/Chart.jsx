@@ -222,7 +222,7 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
   );
 }
 
-export function BarCompare({ data, showIncome = true, showExpenses = true, unitLabel = 'ARS', tickIncomeLabel = 'Income', tickExpenseLabel = 'Expense', tickRenderer = null, tooltipLabelFromDatum = false, onItemClick = null, onIncomeClick = null, onExpensesClick = null }) {
+export function BarCompare({ data, showIncome = true, showExpenses = true, unitLabel = 'ARS', tickIncomeLabel = 'Income', tickExpenseLabel = 'Expense', tickRenderer = null, tooltipLabelFromDatum = false, customTooltip = null, onItemClick = null, onIncomeClick = null, onExpensesClick = null }) {
   const XTick = (props) => {
     const { x, y, payload } = props;
     const value = String(payload?.value || '');
@@ -250,7 +250,7 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={tickRenderer ? tickRenderer : <XTick />} interval={0} />
           <YAxis tickFormatter={formatYAxisValue} />
-          <Tooltip content={tooltipLabelFromDatum ? (
+          <Tooltip content={customTooltip || (tooltipLabelFromDatum ? (
             ({ active, payload }) => {
               if (active && payload && payload.length) {
                 const isDark = document.documentElement.classList.contains('dark');
@@ -268,7 +268,7 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
               }
               return null;
             }
-          ) : <CustomTooltip />} />
+          ) : <CustomTooltip />)} />
           {showIncome && (
             <Bar 
               dataKey="income" 

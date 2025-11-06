@@ -140,6 +140,30 @@ export async function deleteInvestment(id) {
   return data;
 }
 
+export async function getFAConfig() {
+  try {
+    const { data } = await http.get('/fa-config');
+    return data || {
+      fixed: [],
+      wellbeing: [],
+      saving: [],
+      targets: { fixed: 50, wellbeing: 30, saving: 20 },
+    };
+  } catch {
+    return {
+      fixed: [],
+      wellbeing: [],
+      saving: [],
+      targets: { fixed: 50, wellbeing: 30, saving: 20 },
+    };
+  }
+}
+
+export async function updateFAConfig(payload) {
+  const { data } = await http.put('/fa-config', payload);
+  return data;
+}
+
 
 
 

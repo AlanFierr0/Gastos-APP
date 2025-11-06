@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import { translate } from '../i18n.js';
 import * as api from '../api/index.js';
 
@@ -13,7 +13,7 @@ export function AppProvider({ children }) {
   const [exchangeRates, setExchangeRates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [locale, setLocale] = useState('es');
+  const locale = 'es'; // Always Spanish
   const [theme, setTheme] = useState(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('theme') : null;
     if (stored === 'dark' || stored === 'light') return stored;
@@ -72,11 +72,11 @@ export function AppProvider({ children }) {
     };
   }, [expenses, income]);
 
-  function categoryById(id) {
+  const categoryById = useCallback((id) => {
     return categories.find((x) => x.id === id);
-  }
+  }, [categories]);
 
-  async function ensureCategory(name, typeName) {
+  const ensureCategory = useCallback(async (name, typeName) => {
     const lower = String(name || '').trim().toLowerCase();
     if (!lower) return null;
     const existing = categories.find((c) => String(c.name || '').toLowerCase() === lower);
@@ -87,9 +87,9 @@ export function AppProvider({ children }) {
       return created;
     }
     return null;
-  }
+  }, [categories]);
 
-  const value = {
+  const value = useMemo(() => ({
     expenses,
     income,
     investments,
@@ -107,8 +107,7 @@ export function AppProvider({ children }) {
     totals,
     api,
     locale,
-    setLocale,
-    t: (key) => translate(locale, key),
+    t: (key) => translate('es', key),
     theme,
     setTheme,
     toggleTheme: () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark')),
@@ -267,9 +266,55 @@ export function AppProvider({ children }) {
         setInvestmentSummary(summary);
       } catch {}
     },
+  }), [
+    expenses,
+    income,
+    investments,
+    investmentSummary,
+    categories,
+    exchangeRates,
+    loading,
+    error,
+    totals,
+    locale,
+    theme,
+    setExpenses,
+    setIncome,
+    setInvestments,
+    setInvestmentSummary,
+    setCategories,
+    setExchangeRates,
+    setTheme,
+    categoryById,
+    ensureCategory,
+  ]);
+
+  // Ensure value is always an object
+  const contextValue = value || {
+    expenses: [],
+    income: [],
+    investments: [],
+    investmentSummary: null,
+    categories: [],
+    exchangeRates: [],
+    setExpenses: () => {},
+    setIncome: () => {},
+    setInvestments: () => {},
+    setInvestmentSummary: () => {},
+    setCategories: () => {},
+    setExchangeRates: () => {},
+    loading: false,
+    error: null,
+    totals: { totalExpenses: 0, totalIncome: 0, balance: 0 },
+    api,
+    locale: 'es',
+    t: (key) => translate('es', key),
+    theme: 'light',
+    setTheme: () => {},
+    toggleTheme: () => {},
   };
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {
