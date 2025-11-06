@@ -35,8 +35,10 @@ const CustomTooltip = ({ active, payload }) => {
         style={isDark ? { backgroundColor: 'rgb(31 41 55)', borderColor: 'rgb(55 65 81)' } : {}}
       >
         {payload.map((entry, index) => {
-          const value = entry.value || 0;
-          const formatted = value.toLocaleString('es-AR', { 
+          // Use absolute value for display - the chart position already shows direction
+          // Expenses are negative (below zero) but should display as positive
+          const absValue = Math.abs(entry.value || 0);
+          const formatted = absValue.toLocaleString('es-AR', { 
             style: 'currency', 
             currency: 'ARS',
             minimumFractionDigits: 2,
@@ -133,10 +135,16 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
     return palette;
   };
   
-  // Sort data by percentage (value) in descending order
+  // Sort data by value in descending order and filter invalid values
   const sortedData = React.useMemo(() => {
     if (!data || data.length === 0) return [];
-    return [...data].sort((a, b) => (b.value || 0) - (a.value || 0));
+    // Filter out invalid values (NaN, Infinity, negative, zero)
+    const validData = data.filter(item => {
+      const value = Number(item.value || 0);
+      return !isNaN(value) && isFinite(value) && value > 0;
+    });
+    // Sort by value descending
+    return [...validData].sort((a, b) => (b.value || 0) - (a.value || 0));
   }, [data]);
   
   // Generate palette based on data length
@@ -147,6 +155,13 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
   const PieTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const isDark = document.documentElement.classList.contains('dark');
+      const entry = payload[0];
+      const value = Number(entry.value || 0);
+      
+      // Calculate total to show percentage
+      const total = sortedData.reduce((sum, item) => sum + Number(item.value || 0), 0);
+      const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+      
       return (
         <div 
           className={`rounded-lg border p-2 shadow-lg z-50 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
@@ -156,8 +171,9 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
             className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
             style={isDark ? { color: 'rgb(243 244 246)', backgroundColor: 'transparent' } : {}}
           >
-            <span style={{ color: payload[0].payload.fill || (isDark ? 'rgb(243 244 246)' : '#000') }} className="category-name">{payload[0].name}: </span>
-            {payload[0].value?.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+            <span style={{ color: entry.payload.fill || (isDark ? 'rgb(243 244 246)' : '#000') }} className="category-name">{entry.name}: </span>
+            {value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+            <span className="ml-2 text-xs opacity-75">({percentage}%)</span>
           </p>
         </div>
       );

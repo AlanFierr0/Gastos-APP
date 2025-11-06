@@ -23,15 +23,6 @@ export async function getIncome(params) {
   }
 }
 
-export async function getPersons() {
-  try {
-    const { data } = await http.get('/persons');
-    return data ?? [];
-  } catch {
-    return [];
-  }
-}
-
 export async function getCategories() {
   try {
     const { data } = await http.get('/categories');
@@ -46,25 +37,10 @@ export async function createCategory(payload) {
   return data;
 }
 
-export async function createPerson(payload) {
-  const { data } = await http.post('/persons', payload);
-  return data;
-}
-
-export async function updatePerson(id, payload) {
-  const { data } = await http.put(`/persons/${id}`, payload);
-  return data;
-}
-
 export async function uploadExcel(formData) {
   const { data } = await http.post('/upload/excel', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
-  return data;
-}
-
-export async function createPersons(personNames) {
-  const { data } = await http.post('/upload/create-persons', { personNames });
   return data;
 }
 

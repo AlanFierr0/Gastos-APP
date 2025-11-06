@@ -7,7 +7,7 @@ import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import Select from '../components/Select.jsx';
 
 export default function Dashboard() {
-  const { expenses, income, investmentSummary, t, locale, persons } = useApp();
+  const { expenses, income, investmentSummary, t, locale } = useApp();
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   const navigate = useNavigate();
@@ -99,79 +99,58 @@ export default function Dashboard() {
     const map = new Map();
     for (const e of periodExpenses) {
       const name = (typeof e.category === 'object' && e.category) ? (e.category.name || t('expenseGeneric')) : (e.category || t('expenseGeneric'));
-      const prev = map.get(name) || 0;
-      map.set(name, prev + Number(e.amount || 0));
+      const amount = Number(e.amount || 0);
+      // Only add valid, positive numbers
+      if (!isNaN(amount) && isFinite(amount) && amount > 0) {
+        const prev = map.get(name) || 0;
+        map.set(name, prev + amount);
+      }
     }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+    
+    // Convert to array and filter out zero values
+    let allData = Array.from(map.entries())
+      .map(([name, value]) => ({ name, value: Number(value) }))
+      .filter(item => item.value > 0);
+    
+    if (allData.length === 0) return [];
+    
+    // Calculate total
+    const total = allData.reduce((sum, item) => sum + item.value, 0);
+    if (total === 0) return [];
+    
+    // Group small categories (less than 2% of total) into "Otros"
+    const threshold = total * 0.02; // 2% threshold
+    const mainCategories = [];
+    let othersSum = 0;
+    
+    for (const item of allData) {
+      if (item.value >= threshold) {
+        mainCategories.push(item);
+      } else {
+        othersSum += item.value;
+      }
+    }
+    
+    // Sort main categories by value descending
+    mainCategories.sort((a, b) => b.value - a.value);
+    
+    // Add "Otros" category if there are small categories
+    if (othersSum > 0) {
+      mainCategories.push({ name: t('others') || 'Otros', value: othersSum });
+    }
+    
+    return mainCategories;
   }, [periodExpenses, t]);
 
   // Only current selected period
   const barData = useMemo(() => {
     const label = (periodOptions.find((p) => p.value === effectivePeriod)?.label) || effectivePeriod;
-    return [{ name: label, income: Number(monthTotals.totalIncome || 0), expenses: Number(monthTotals.totalExpenses || 0) }];
+    const incomeValue = Math.abs(Number(monthTotals.totalIncome || 0));
+    const expensesValue = Math.abs(Number(monthTotals.totalExpenses || 0));
+    // Both income and expenses should be positive to appear above zero line
+    return [{ name: label, income: incomeValue, expenses: expensesValue }];
   }, [periodOptions, effectivePeriod, monthTotals]);
 
-  // Income by person chart data - for comparison
-  const incomeByPersonData = useMemo(() => {
-    const personTotals = new Map();
-    
-    // Initialize all persons
-    persons.forEach((p) => {
-      personTotals.set(p.id, { name: p.name, income: 0 });
-    });
-    
-    // Calculate income by person
-    periodIncome.forEach((i) => {
-      if (i.personId) {
-        const current = personTotals.get(i.personId) || { name: '', income: 0 };
-        personTotals.set(i.personId, {
-          name: current.name || persons.find((p) => p.id === i.personId)?.name || '',
-          income: current.income + Number(i.amount || 0),
-        });
-      }
-    });
-    
-    // Return all persons with income, sorted by income descending
-    return Array.from(personTotals.values())
-      .filter((p) => p.income > 0)
-      .map((p) => ({ 
-        name: p.name, 
-        income: p.income,
-        expenses: 0, // Set to 0 so only income bars show
-      }))
-      .sort((a, b) => b.income - a.income);
-  }, [periodIncome, persons]);
-
-  // Expenses by person chart data - for comparison
-  const expensesByPersonData = useMemo(() => {
-    const personTotals = new Map();
-    
-    // Initialize all persons
-    persons.forEach((p) => {
-      personTotals.set(p.id, { name: p.name, expenses: 0 });
-    });
-    
-    // Calculate expenses by person
-    periodExpenses.forEach((e) => {
-      if (e.personId) {
-        const current = personTotals.get(e.personId) || { name: '', expenses: 0 };
-        personTotals.set(e.personId, {
-          name: current.name || persons.find((p) => p.id === e.personId)?.name || '',
-          expenses: current.expenses + Number(e.amount || 0),
-        });
-      }
-    });
-    
-    // Return all persons with expenses, sorted by expenses descending
-    return Array.from(personTotals.values())
-      .filter((p) => p.expenses > 0)
-      .map((p) => ({ 
-        name: p.name, 
-        income: 0, // Set to 0 so only expense bars show
-        expenses: p.expenses,
-      }))
-      .sort((a, b) => b.expenses - a.expenses);
-  }, [periodExpenses, persons]);
 
   function handleGoToIncome() {
     navigate('/income', { state: { openForm: true } });
@@ -290,71 +269,6 @@ export default function Dashboard() {
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title={t('incomeByPerson')}>
-          {incomeByPersonData.length ? (
-            <BarCompare 
-              data={incomeByPersonData} 
-              showIncome={true} 
-              showExpenses={false}
-              tickRenderer={({ x, y, payload }) => {
-                const personName = String(payload?.value || '');
-                const person = persons.find(p => p.name === personName);
-                const color = person?.color || '#3b82f6';
-                const icon = person?.icon || 'person';
-                return (
-                  <foreignObject x={x - 40} y={y + 2} width="80" height="20">
-                    <div className="flex items-center justify-center gap-1" style={{ color, fontSize: '12px', lineHeight: '12px' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '14px', lineHeight: '12px' }}>{icon}</span>
-                      <span className="truncate max-w-[64px]">{personName}</span>
-                    </div>
-                  </foreignObject>
-                );
-              }}
-              tooltipLabelFromDatum
-              onItemClick={(label) => {
-                const person = persons.find(p => p.name === String(label));
-                if (!person) return;
-                navigate('/income', { state: { filterPersonId: person.id, periodType, selectedPeriod: effectivePeriod } });
-              }}
-            />
-          ) : (
-            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
-          )}
-        </Card>
-        <Card title={t('expensesByPerson')}>
-          {expensesByPersonData.length ? (
-            <BarCompare 
-              data={expensesByPersonData} 
-              showIncome={false} 
-              showExpenses={true}
-              tickRenderer={({ x, y, payload }) => {
-                const personName = String(payload?.value || '');
-                const person = persons.find(p => p.name === personName);
-                const color = person?.color || '#3b82f6';
-                const icon = person?.icon || 'person';
-                return (
-                  <foreignObject x={x - 40} y={y + 2} width="80" height="20">
-                    <div className="flex items-center justify-center gap-1" style={{ color, fontSize: '12px', lineHeight: '12px' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '14px', lineHeight: '12px' }}>{icon}</span>
-                      <span className="truncate max-w-[64px]">{personName}</span>
-                    </div>
-                  </foreignObject>
-                );
-              }}
-              tooltipLabelFromDatum
-              onItemClick={(label) => {
-                const person = persons.find(p => p.name === String(label));
-                if (!person) return;
-                navigate('/expenses', { state: { filterPersonId: person.id, periodType, selectedPeriod: effectivePeriod } });
-              }}
-            />
-          ) : (
-            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
-          )}
-        </Card>
-      </section>
-
       {/* Recent Transactions */}
       <section className="rounded-xl border border-gray-200 dark:border-gray-800 p-6 bg-white dark:bg-gray-900/50">
         <div className="flex items-center justify-between mb-4">
@@ -362,7 +276,7 @@ export default function Dashboard() {
         </div>
         <div className="flow-root">
           <ul className="divide-y divide-gray-200 dark:divide-gray-800" role="list">
-            {getRecentTransactions(periodIncome, periodExpenses, persons, t).map((t) => (
+            {getRecentTransactions(periodIncome, periodExpenses, t).map((t) => (
               <li key={t.id} className="py-3 sm:py-4">
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
@@ -373,14 +287,14 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{t.title}</p>
                     <p className="text-sm text-[#616f89] dark:text-gray-400 truncate">
-                      {t.personName ? `${t.category} • ${t.personName}` : t.category}
+                      {t.category}
                     </p>
                   </div>
                   <div className={`inline-flex items-center text-base font-semibold ${t.kind === 'income' ? 'text-green-600' : 'text-orange-500'}`}>{t.displayAmount}</div>
                 </div>
               </li>
             ))}
-            {getRecentTransactions(periodIncome, periodExpenses, persons, t).length === 0 && (
+            {getRecentTransactions(periodIncome, periodExpenses, t).length === 0 && (
               <li className="py-2 text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</li>
             )}
           </ul>
@@ -390,19 +304,12 @@ export default function Dashboard() {
   );
 }
 
-function getRecentTransactions(income = [], expenses = [], persons = [], t) {
-  const getPersonName = (personId) => {
-    if (!personId) return null;
-    const person = persons.find((p) => p.id === personId);
-    return person ? person.name : null;
-  };
-
+function getRecentTransactions(income = [], expenses = [], t) {
   const incomeItems = income.map((i) => ({
     id: `i-${i.id ?? Math.random()}`,
     kind: 'income',
     title: i.source || t('incomeGeneric'),
     category: t('incomeGeneric'),
-    personName: getPersonName(i.personId),
     amount: Number(String(i.amount || 0).toString().replace(/[^0-9.-]/g, '')),
     displayAmount: formatMoney(i.amount || 0, i.currency || 'ARS', { sign: 'always' }),
     date: new Date(i.date || 0).getTime() || 0,
@@ -413,7 +320,6 @@ function getRecentTransactions(income = [], expenses = [], persons = [], t) {
     kind: 'expense',
     title: e.notes || t('expenseGeneric'),
     category: (typeof e.category === 'object' && e.category) ? (e.category.name || t('expenseGeneric')) : (e.category || t('expenseGeneric')),
-    personName: getPersonName(e.personId),
     amount: -Number(String(e.amount || 0).toString().replace(/[^0-9.-]/g, '')),
     displayAmount: '-' + formatMoney(e.amount || 0, e.currency || 'ARS', { sign: 'none' }),
     date: new Date(e.date || 0).getTime() || 0,
@@ -562,8 +468,17 @@ function filterByYear(expenses = [], income = [], year) {
 }
 
 function computeTotals(expenses = [], income = [], investmentSummary = null) {
-  const totalExpenses = expenses.reduce((acc, r) => acc + Number(r.amount || 0), 0);
-  const totalIncome = income.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  // Ensure expenses are always positive (some data might have negative values)
+  const totalExpenses = expenses.reduce((acc, r) => {
+    const amount = Number(r.amount || 0);
+    // Use absolute value to ensure expenses are always positive
+    return acc + Math.abs(amount);
+  }, 0);
+  const totalIncome = income.reduce((acc, r) => {
+    const amount = Number(r.amount || 0);
+    // Ensure income is always positive
+    return acc + Math.abs(amount);
+  }, 0);
   // Add investment profit as income (only profit, not total value)
   const investmentProfit = investmentSummary ? (Number(investmentSummary.profit || 0)) : 0;
   const totalIncomeWithInvestments = totalIncome + investmentProfit;

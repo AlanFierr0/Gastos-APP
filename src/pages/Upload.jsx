@@ -6,7 +6,7 @@ import { formatMoney, formatDate } from '../utils/format.js';
 import * as api from '../api/index.js';
 
 export default function Upload() {
-  const { t, persons, refreshExpenses, refreshIncome, refreshPersons } = useApp();
+  const { t, refreshExpenses, refreshIncome } = useApp();
   const { register, handleSubmit, reset, watch } = useForm();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -60,8 +60,44 @@ export default function Upload() {
       const records = result.records || [];
       setPreviewData(records);
       
+      let message = '';
       if (records.length === 0) {
-        setStatus('⚠️ El archivo se procesó correctamente pero no se encontraron registros válidos.');
+        message = '⚠️ El archivo se procesó correctamente pero no se encontraron registros válidos.';
+      }
+      
+      // Show errors and warnings from preview
+      if (result.errors && result.errors.length > 0) {
+        message += message ? '\n\n' : '';
+        message += `❌ Errores encontrados durante el análisis (${result.errors.length}):\n`;
+        result.errors.slice(0, 10).forEach((err, idx) => {
+          const errInfo = err.item || err.category || 'Desconocido';
+          const errMonth = err.month ? ` mes ${err.month}/${err.year || '?'}` : '';
+          const errValue = err.value ? ` valor: ${err.value}` : '';
+          const errMsg = err.error || err.reason || 'Error desconocido';
+          message += `  ${idx + 1}. ${errInfo}${errMonth}${errValue}: ${errMsg}\n`;
+        });
+        if (result.errors.length > 10) {
+          message += `  ... y ${result.errors.length - 10} errores más.\n`;
+        }
+      }
+      
+      if (result.warnings && result.warnings.length > 0) {
+        message += message ? '\n\n' : '';
+        message += `⚠️ Advertencias encontradas durante el análisis (${result.warnings.length}):\n`;
+        result.warnings.slice(0, 10).forEach((warn, idx) => {
+          const warnInfo = warn.item || warn.category || 'Desconocido';
+          const warnMonth = warn.month ? ` mes ${warn.month}/${warn.year || '?'}` : '';
+          const warnValue = warn.value ? ` valor: ${warn.value}` : '';
+          const warnMsg = warn.reason || 'Advertencia';
+          message += `  ${idx + 1}. ${warnInfo}${warnMonth}${warnValue}: ${warnMsg}\n`;
+        });
+        if (result.warnings.length > 10) {
+          message += `  ... y ${result.warnings.length - 10} advertencias más.\n`;
+        }
+      }
+      
+      if (message) {
+        setStatus(message);
       } else {
         setStatus(null);
       }
@@ -105,14 +141,38 @@ export default function Upload() {
     setLoading(true);
     setStatus(t('uploading'));
     try {
-      await api.confirmImport(previewData);
-      setStatus(t('importSuccess'));
+      const result = await api.confirmImport(previewData);
+      let message = result.message || t('importSuccess');
+      
+      // Build detailed message with errors and warnings
+      if (result.errors && result.errors.length > 0) {
+        message += `\n\n❌ Errores (${result.errors.length}):\n`;
+        result.errors.forEach((err, idx) => {
+          const errInfo = err.item || err.category || err.record?.categoryName || err.record?.source || 'Desconocido';
+          const errMonth = err.month ? ` mes ${err.month}/${err.year || '?'}` : '';
+          const errValue = err.value ? ` valor: ${err.value}` : '';
+          const errMsg = err.error || err.reason || 'Error desconocido';
+          message += `  ${idx + 1}. ${errInfo}${errMonth}${errValue}: ${errMsg}\n`;
+        });
+      }
+      
+      if (result.warnings && result.warnings.length > 0) {
+        message += `\n⚠️ Advertencias (${result.warnings.length}):\n`;
+        result.warnings.forEach((warn, idx) => {
+          const warnInfo = warn.item || warn.category || 'Desconocido';
+          const warnMonth = warn.month ? ` mes ${warn.month}/${warn.year || '?'}` : '';
+          const warnValue = warn.value ? ` valor: ${warn.value}` : '';
+          const warnMsg = warn.reason || 'Advertencia';
+          message += `  ${idx + 1}. ${warnInfo}${warnMonth}${warnValue}: ${warnMsg}\n`;
+        });
+      }
+      
+      setStatus(message);
       setPreviewData(null);
       reset();
       await Promise.all([
         refreshExpenses(),
         refreshIncome(),
-        refreshPersons(),
       ]);
     } catch (e) {
       const errorMsg = getErrorMessage(e);
@@ -175,7 +235,6 @@ export default function Upload() {
                     <tr className="border-b border-gray-200 dark:border-gray-700">
                       <th className="text-left p-2">{t('type')}</th>
                       <th className="text-left p-2">{previewData[0]?.kind === 'income' ? t('source') : t('category')}</th>
-                      <th className="text-left p-2">{t('person')}</th>
                       <th className="text-left p-2">{t('amount')}</th>
                       <th className="text-left p-2">{t('currency')}</th>
                       <th className="text-left p-2">{t('date')}</th>
@@ -194,7 +253,6 @@ export default function Upload() {
                         onSave={handleSaveEdit}
                         onCancel={handleCancelEdit}
                         onRemove={handleRemoveRecord}
-                        persons={persons}
                         t={t}
                       />
                     ))}
@@ -231,21 +289,25 @@ export default function Upload() {
       ) : null}
 
       {status && (
-        <div className={
-          status.includes(t('importSuccess')?.slice(0, 10) || '') || status.includes('exitosamente')
-            ? 'rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20'
-            : status.includes(t('uploadFailed')?.slice(0, 5) || '') || status.includes('Error') || status.includes('error')
-            ? 'rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20'
-            : 'rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900/30'
+        <Card className={
+          status.includes('✅') || status.includes(t('importSuccess')?.slice(0, 10) || '') || status.includes('exitosamente')
+            ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20'
+            : status.includes('❌') || status.includes(t('uploadFailed')?.slice(0, 5) || '') || status.includes('Error') || status.includes('error')
+            ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+            : status.includes('⚠️') || status.includes('Advertencia') || status.includes('Warning')
+            ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20'
+            : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/30'
         }>
-          <p className="text-sm">{status}</p>
-        </div>
+          <div className="pb-24">
+            <p className="text-sm whitespace-pre-wrap font-mono leading-relaxed">{status}</p>
+          </div>
+        </Card>
       )}
     </div>
   );
 }
 
-function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemove, persons, t }) {
+function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemove, t }) {
   const [editedRecord, setEditedRecord] = useState(record);
 
   React.useEffect(() => {
@@ -282,18 +344,6 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
             onChange={(e) => handleFieldChange(editedRecord.kind === 'income' ? 'source' : 'categoryName', e.target.value)}
             className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
           />
-        </td>
-        <td className="p-2">
-          <select
-            value={editedRecord.person || ''}
-            onChange={(e) => handleFieldChange('person', e.target.value || undefined)}
-            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
-          >
-            <option value="">-</option>
-            {persons.map((p) => (
-              <option key={p.id} value={p.name}>{p.name}</option>
-            ))}
-          </select>
         </td>
         <td className="p-2">
           <input
@@ -359,8 +409,7 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
     <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
       <td className="p-2">{record.kind === 'income' ? t('income') : t('expense')}</td>
       <td className="p-2">{record.kind === 'income' ? (record.source || '-') : (record.categoryName || '-')}</td>
-      <td className="p-2">{record.person || '-'}</td>
-      <td className="p-2">{formatMoney(record.amount, record.currency || 'ARS', { sign: 'none' })}</td>
+      <td className="p-2">{formatMoney(record.amount, record.currency || 'ARS', { sign: 'auto' })}</td>
       <td className="p-2">{record.currency || 'ARS'}</td>
       <td className="p-2">{formatDate(record.date)}</td>
       <td className="p-2">{record.notes || '-'}</td>

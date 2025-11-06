@@ -8,8 +8,8 @@ import Dashboard from './pages/Dashboard.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Income from './pages/Income.jsx';
 import Upload from './pages/Upload.jsx';
-import People from './pages/People.jsx';
 import Spreadsheet from './pages/Spreadsheet.jsx';
+import Grid from './pages/Grid.jsx';
 import Investments from './pages/Investments.jsx';
 
 const root = createRoot(document.getElementById('root'));
@@ -24,10 +24,10 @@ root.render(
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/expenses" element={<Expenses />} />
             <Route path="/income" element={<Income />} />
-            <Route path="/people" element={<People />} />
             <Route path="/investments" element={<Investments />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/spreadsheet" element={<Spreadsheet />} />
+            <Route path="/grid" element={<Grid />} />
           </Route>
         </Routes>
       </BrowserRouter>

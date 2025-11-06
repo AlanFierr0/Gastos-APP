@@ -9,7 +9,6 @@ export function AppProvider({ children }) {
   const [income, setIncome] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [investmentSummary, setInvestmentSummary] = useState(null);
-  const [persons, setPersons] = useState([]);
   const [categories, setCategories] = useState([]);
   const [exchangeRates, setExchangeRates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -29,12 +28,11 @@ export function AppProvider({ children }) {
     (async () => {
       try {
         setLoading(true);
-        const [e, i, inv, invSum, p, c, ex] = await Promise.allSettled([
+        const [e, i, inv, invSum, c, ex] = await Promise.allSettled([
           api.getExpenses(), 
           api.getIncome(), 
           api.getInvestments(),
           api.getInvestmentSummary(),
-          api.getPersons(), 
           api.getCategories(),
           api.getExchangeRates()
         ]);
@@ -42,7 +40,6 @@ export function AppProvider({ children }) {
         if (i.status === 'fulfilled') setIncome(i.value);
         if (inv.status === 'fulfilled') setInvestments(inv.value);
         if (invSum.status === 'fulfilled') setInvestmentSummary(invSum.value);
-        if (p.status === 'fulfilled') setPersons(p.value);
         if (c.status === 'fulfilled') setCategories(c.value);
         if (ex.status === 'fulfilled') setExchangeRates(ex.value);
       } catch (err) {
@@ -75,11 +72,6 @@ export function AppProvider({ children }) {
     };
   }, [expenses, income]);
 
-  function personNameById(id) {
-    const p = persons.find((x) => x.id === id);
-    return p ? p.name : '';
-  }
-
   function categoryById(id) {
     return categories.find((x) => x.id === id);
   }
@@ -102,14 +94,12 @@ export function AppProvider({ children }) {
     income,
     investments,
     investmentSummary,
-    persons,
     categories,
     exchangeRates,
     setExpenses,
     setIncome,
     setInvestments,
     setInvestmentSummary,
-    setPersons,
     setCategories,
     setExchangeRates,
     loading,
@@ -122,34 +112,6 @@ export function AppProvider({ children }) {
     theme,
     setTheme,
     toggleTheme: () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark')),
-    async addPerson(name) {
-      const trimmed = String(name || '').trim();
-      if (!trimmed) return;
-      // optimistic add
-      const optimistic = { id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2), name: trimmed };
-      setPersons((prev) => [...prev, optimistic]);
-      try {
-        const saved = await api.createPerson({ name: trimmed });
-        if (saved && saved.id) {
-          setPersons((prev) => [saved, ...prev.filter((p) => p.id !== optimistic.id)]);
-        }
-      } catch {}
-    },
-    async updatePerson(id, name, icon, color) {
-      const trimmed = String(name || '').trim();
-      if (!trimmed) return;
-      const optimistic = { name: trimmed, icon: icon || undefined, color: color || undefined };
-      setPersons((prev) => prev.map((p) => (p.id === id ? { ...p, ...optimistic } : p)));
-      try {
-        const saved = await api.updatePerson(id, { name: trimmed, icon: icon || undefined, color: color || undefined });
-        if (saved && saved.id) {
-          setPersons((prev) => prev.map((p) => (p.id === id ? saved : p)));
-        }
-      } catch {}
-    },
-    removePerson(id) {
-      setPersons((prev) => prev.filter((p) => p.id !== id));
-    },
     async addIncome(newIncome) {
       const lowerSource = String(newIncome.source || '').trim().toLowerCase();
       let categoryId = newIncome.categoryId;
@@ -163,7 +125,6 @@ export function AppProvider({ children }) {
         source: lowerSource,
         categoryId,
         category: categoryId ? categoryById(categoryId) : { id: undefined, name: lowerSource },
-        person: personNameById(newIncome.personId) || newIncome.person,
       };
       setIncome((prev) => [optimistic, ...prev]);
       try {
@@ -207,7 +168,6 @@ export function AppProvider({ children }) {
         ...newExpense,
         categoryId,
         category: categoryId ? categoryById(categoryId) : { id: undefined, name: lowerCategoryName },
-        person: personNameById(newExpense.personId) || newExpense.person,
       };
       setExpenses((prev) => [optimistic, ...prev]);
       try {
@@ -251,12 +211,6 @@ export function AppProvider({ children }) {
         setIncome(data || []);
       } catch {}
     },
-    async refreshPersons() {
-      try {
-        const data = await api.getPersons();
-        setPersons(data || []);
-      } catch {}
-    },
     async refreshExchangeRates() {
       try {
         const data = await api.getExchangeRates();
@@ -267,7 +221,6 @@ export function AppProvider({ children }) {
       const optimistic = {
         id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         ...newInvestment,
-        person: personNameById(newInvestment.personId) || newInvestment.person,
       };
       setInvestments((prev) => [optimistic, ...prev]);
       try {
@@ -284,7 +237,7 @@ export function AppProvider({ children }) {
     },
     async updateInvestment(id, updates) {
       const optimistic = { ...updates, id };
-      setInvestments((prev) => prev.map((inv) => (inv.id === id ? { ...inv, ...optimistic, person: personNameById(updates.personId) || inv.person } : inv)));
+      setInvestments((prev) => prev.map((inv) => (inv.id === id ? { ...inv, ...optimistic } : inv)));
       try {
         const saved = await api.updateInvestment(id, updates);
         if (saved && saved.id) {

@@ -7,11 +7,10 @@ import { formatDate, formatMoney } from '../utils/format.js';
 import { useLocation } from 'react-router-dom';
 
 export default function Income() {
-  const { income, t, addIncome, updateIncome, removeIncome, persons, categories, locale } = useApp();
+  const { income, t, addIncome, updateIncome, removeIncome, categories, locale } = useApp();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [personFilter, setPersonFilter] = useState('');
   const [periodType, setPeriodType] = useState('all'); // all | month | year
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   const [showForm, setShowForm] = useState(location.state?.openForm || false);
@@ -27,9 +26,6 @@ export default function Income() {
       window.history.replaceState({}, document.title);
     }
     // Apply incoming filters (from Dashboard)
-    if (location.state?.filterPersonId) {
-      setPersonFilter(location.state.filterPersonId);
-    }
     if (location.state?.periodType) {
       setPeriodType(location.state.periodType);
     }
@@ -41,12 +37,6 @@ export default function Income() {
   const incomeCategories = useMemo(() => {
     return (categories || []).filter((c) => String(c?.type?.name || '').toLowerCase() === 'income');
   }, [categories]);
-
-  const personMap = useMemo(() => {
-    const map = new Map();
-    (persons || []).forEach(p => map.set(p.id, p));
-    return map;
-  }, [persons]);
 
   // Period options
   const selectedYear = useMemo(() => {
@@ -68,20 +58,18 @@ export default function Income() {
     const q = query.toLowerCase();
     return (periodIncome || [])
       .filter((r) => (!q || String(r.source || '').toLowerCase().includes(q))
-        && (!categoryFilter || (r.category?.id === categoryFilter))
-        && (!personFilter || r.personId === personFilter))
+        && (!categoryFilter || (r.category?.id === categoryFilter)))
       .map((r) => ({
         ...r,
         date: formatDate(r.date),
         rawAmount: r.amount,
         rawDate: typeof r.date === 'string' ? r.date : new Date(r.date).toISOString(),
       }));
-  }, [periodIncome, query, categoryFilter, personFilter]);
+  }, [periodIncome, query, categoryFilter]);
 
   const columns = [
     { key: 'date', header: t('date') },
     { key: 'categoryName', header: t('category') },
-    { key: 'person', header: t('person') },
     { key: 'amount', header: t('amount') },
     { key: 'type', header: t('incomeType') },
   ];
@@ -101,7 +89,6 @@ export default function Income() {
       amount: Number(values.amount),
       currency: values.currency || 'ARS',
       date: values.date,
-      personId: values.personId,
       isRecurring: values.isRecurring === true || values.isRecurring === 'true',
     };
     if (editingId) {
@@ -153,7 +140,6 @@ export default function Income() {
     setValue('amount', row.rawAmount ?? row.amount);
     setValue('currency', row.currency || 'ARS');
     setValue('date', (row.rawDate || row.date || '').slice(0, 10));
-    setValue('personId', row.personId || '');
     setValue('isRecurring', row.isRecurring ? 'true' : 'false');
   }
 
@@ -174,12 +160,6 @@ export default function Income() {
             <option value="">{t('allOption')}</option>
             {incomeCategories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <select className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}>
-            <option value="">{t('allOption')}</option>
-            {persons.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           <div className="flex items-center gap-2 ml-auto">
@@ -253,15 +233,6 @@ export default function Income() {
               </div>
             </div>
             <div className="flex flex-col gap-1 md:col-span-4">
-              <label className="text-sm text-[#616f89]">Person</label>
-              <select {...register('personId', { required: true })} className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
-                <option value="">Select a person</option>
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1 md:col-span-4">
               <label className="text-sm text-[#616f89]">{t('incomeType')}</label>
               <select {...register('isRecurring')} className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
                 <option value="false">{t('extraordinaryIncome')}</option>
@@ -281,9 +252,6 @@ export default function Income() {
           rows={rows.map((r) => {
             const ym = extractYearMonth(r.date);
             const monthLabel = ym ? formatMonthYear(new Date(Date.UTC(ym.year, ym.month - 1, 15))) : formatDate(r.date);
-            const personObj = personMap.get(r.personId);
-            const personColor = personObj?.color || '#3b82f6';
-            const personIcon = personObj?.icon || 'person';
             const categoryName = r.category?.name ?? r.source ?? '';
             return {
               id: r.id,
@@ -313,23 +281,9 @@ export default function Income() {
                   <span>{categoryName || '-'}</span>
                 </div>
               ),
-              person: (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPersonFilter(personFilter === r.personId ? '' : (r.personId || ''))}
-                    className={`material-symbols-outlined text-lg transition-all hover:scale-110 cursor-pointer ${personFilter === r.personId ? 'ring-2 ring-primary ring-offset-1 rounded' : ''}`}
-                    style={{ color: personColor }}
-                    title={`${t('filterBy')} ${r.person?.name || ''}`}
-                  >
-                    {personIcon}
-                  </button>
-                  <span>{r.person?.name || '-'}</span>
-                </div>
-              ),
               amount: formatMoney(r.rawAmount ?? r.amount, r.currency || 'ARS'),
               type: r.isRecurring ? t('recurringIncome') : t('extraordinaryIncome'),
               currency: r.currency,
-              personId: r.personId,
               category: r.category,
               source: r.source,
               rawAmount: r.rawAmount,

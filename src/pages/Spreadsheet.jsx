@@ -25,24 +25,171 @@ function getCategoryColor(categoryName) {
   return `hsl(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`;
 }
 
+// Helper component for inline editing
+function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const { updateExpense, updateIncome } = useApp();
 
+  React.useEffect(() => {
+    setEditValue(value);
+  }, [value]);
+
+  const handleSave = async () => {
+    if (editValue === value) {
+      setIsEditing(false);
+      return;
+    }
+
+    try {
+      const updates = {};
+      
+      // Convert value based on field type
+      if (field === 'amount') {
+        const numValue = parseFloat(String(editValue));
+        if (isNaN(numValue) || numValue < 0) {
+          // Revert if invalid
+          setEditValue(value);
+          setIsEditing(false);
+          return;
+        }
+        updates.amount = numValue;
+      } else if (field === 'date') {
+        // Parse date and normalize to first day of month
+        const date = new Date(editValue);
+        if (!isNaN(date.getTime())) {
+          const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), 1, 12, 0, 0, 0));
+          updates.date = normalizedDate.toISOString();
+        }
+      } else if (field === 'currency') {
+        updates.currency = editValue.toUpperCase();
+      } else if (field === 'notes') {
+        updates.notes = editValue || undefined;
+      } else if (field === 'category') {
+        updates.categoryName = editValue;
+      }
+
+      if (row.type === 'expense') {
+        await updateExpense(row.id, updates);
+      } else {
+        await updateIncome(row.id, updates);
+      }
+
+      setIsEditing(false);
+      if (onSave) onSave();
+    } catch (error) {
+      console.error('Error saving:', error);
+      // Revert on error
+      setEditValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  const handleBlur = () => {
+    handleSave();
+  };
+
+  if (!isEditing) {
+    let displayValue = value;
+    if (field === 'amount') {
+      displayValue = formatMoney(value, row.currency || 'ARS', { sign: 'none' });
+    } else if (field === 'date') {
+      if (formatMonthYear) {
+        displayValue = formatMonthYear(value);
+      } else {
+        // Fallback format if formatMonthYear not provided
+        const date = typeof value === 'string' ? new Date(value) : value;
+        if (!isNaN(date.getTime())) {
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1;
+          displayValue = `${String(month).padStart(2, '0')}/${year}`;
+        } else {
+          displayValue = '-';
+        }
+      }
+    }
+
+    return (
+      <div
+        onClick={() => setIsEditing(true)}
+        className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 px-1 py-0.5 rounded min-w-[60px]"
+        title={t('clickToEdit') || 'Click to edit'}
+      >
+        {displayValue || '-'}
+      </div>
+    );
+  }
+
+  // Render input based on field type
+  if (field === 'amount') {
+    return (
+      <input
+        type="number"
+        step="0.01"
+        value={editValue || ''}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 border border-primary focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+        autoFocus
+      />
+    );
+  } else if (field === 'date') {
+    // Format date for input (YYYY-MM format for month/year only)
+    const date = new Date(value);
+    const yearMonth = !isNaN(date.getTime()) 
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      : '';
+    
+    return (
+      <input
+        type="month"
+        value={yearMonth}
+        onChange={(e) => {
+          const [year, month] = e.target.value.split('-');
+          const newDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1, 12, 0, 0, 0));
+          setEditValue(newDate.toISOString());
+        }}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 border border-primary focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+        autoFocus
+      />
+    );
+  } else {
+    return (
+      <input
+        type="text"
+        value={editValue || ''}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 border border-primary focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+        autoFocus
+      />
+    );
+  }
+}
 
 export default function Spreadsheet() {
-  const { expenses, income, persons, t, locale } = useApp();
+  const { expenses, income, t, locale } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Create a map of person IDs to person objects for quick lookup
-  const personMap = useMemo(() => {
-    const map = new Map();
-    (persons || []).forEach(p => map.set(p.id, p));
-    return map;
-  }, [persons]);
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [filterType, setFilterType] = useState('all'); // 'all', 'expense', 'income'
   const [filterCategory, setFilterCategory] = useState(location.state?.filterCategory || null);
-  const [filterPersonId, setFilterPersonId] = useState(location.state?.filterPersonId || null);
   const [periodType, setPeriodType] = useState('all'); // 'all', 'month', 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   
@@ -62,7 +209,7 @@ export default function Spreadsheet() {
   
   // Clear navigation state after applying filter
   useEffect(() => {
-    if (location.state?.filterCategory || location.state?.filterPersonId) {
+    if (location.state?.filterCategory) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, navigate, location.pathname]);
@@ -83,32 +230,23 @@ export default function Spreadsheet() {
     const expenseRows = (periodExpenses || []).map((e) => ({
       id: e.id,
       type: 'expense',
-      typeLabel: t('expense'),
       category: e.category?.name || '',
       amount: e.amount,
       currency: e.currency || 'ARS',
       date: e.date,
       notes: e.notes || '',
-      person: e.person?.name || '',
-      personId: e.personId,
-      source: '',
       rawDate: typeof e.date === 'string' ? e.date : new Date(e.date).toISOString(),
     }));
 
     const incomeRows = (periodIncome || []).map((i) => ({
       id: i.id,
       type: 'income',
-      typeLabel: i.isRecurring ? t('recurringIncome') : t('income'),
       category: i.category?.name || '',
       amount: i.amount,
       currency: i.currency || 'ARS',
       date: i.date,
-      notes: '',
-      person: i.person?.name || '',
-      personId: i.personId,
-      source: i.source || '',
+      notes: i.notes || '',
       rawDate: typeof i.date === 'string' ? i.date : new Date(i.date).toISOString(),
-      isRecurring: i.isRecurring || false,
     }));
 
     return [...expenseRows, ...incomeRows];
@@ -123,11 +261,8 @@ export default function Spreadsheet() {
     if (filterCategory) {
       data = data.filter((d) => d.category === filterCategory);
     }
-    if (filterPersonId) {
-      data = data.filter((d) => d.personId === filterPersonId);
-    }
     return data;
-  }, [allData, filterType, filterCategory, filterPersonId]);
+  }, [allData, filterType, filterCategory]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -147,10 +282,6 @@ export default function Spreadsheet() {
         case 'category':
           aVal = String(a.category || '').toLowerCase();
           bVal = String(b.category || '').toLowerCase();
-          break;
-        case 'person':
-          aVal = String(a.person || '').toLowerCase();
-          bVal = String(b.person || '').toLowerCase();
           break;
         case 'type':
           aVal = String(a.type || '').toLowerCase();
@@ -209,85 +340,67 @@ export default function Spreadsheet() {
       </div>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm text-[#616f89] dark:text-gray-400">{t('type')}:</label>
-          <Select
-            value={filterType}
-            onChange={(v) => setFilterType(v)}
-            options={[
-              { value: 'all', label: t('allOption') },
-              { value: 'expense', label: t('expense') },
-              { value: 'income', label: t('income') },
-            ]}
-          />
-          
-          <label className="text-sm text-[#616f89] dark:text-gray-400 ml-2">{t('period')}:</label>
-          <Select
-            value={periodType}
-            onChange={(v) => {
-              setPeriodType(v);
-              if (v === 'month') setSelectedPeriod(currentMonth);
-              else if (v === 'year') setSelectedPeriod(String(new Date().getFullYear()));
-            }}
-            options={[
-              { value: 'all', label: t('allOption') },
-              { value: 'month', label: t('periodMonth') },
-              { value: 'year', label: t('periodYear') },
-            ]}
-          />
-          
-          {periodType !== 'all' && periodOptions.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm text-[#616f89] dark:text-gray-400">{t('type')}:</label>
             <Select
-              value={selectedPeriod}
-              onChange={(v) => setSelectedPeriod(v)}
-              options={periodOptions}
+              value={filterType}
+              onChange={(v) => setFilterType(v)}
+              options={[
+                { value: 'all', label: t('allOption') },
+                { value: 'expense', label: t('expense') },
+                { value: 'income', label: t('income') },
+              ]}
             />
-          )}
-          
-          {filterCategory && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(filterCategory) }} />
-              <span>{filterCategory}</span>
+            
+            {filterCategory && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
+                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(filterCategory) }} />
+                <span>{filterCategory}</span>
+                <button
+                  onClick={() => setFilterCategory(null)}
+                  className="ml-1 hover:opacity-70 transition-opacity"
+                  title={t('clearFilter')}
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
+            )}
+            
+            {filterCategory && (
               <button
                 onClick={() => setFilterCategory(null)}
-                className="ml-1 hover:opacity-70 transition-opacity"
-                title={t('clearFilter')}
+                className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
               >
-                <span className="material-symbols-outlined text-sm">close</span>
+                {t('clearAllFilters')}
               </button>
-            </div>
-          )}
-          
-          {filterPersonId && personMap.has(filterPersonId) && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
-              <span 
-                className="material-symbols-outlined text-sm" 
-                style={{ color: personMap.get(filterPersonId)?.color || '#3b82f6' }}
-              >
-                {personMap.get(filterPersonId)?.icon || 'person'}
-              </span>
-              <span>{personMap.get(filterPersonId)?.name}</span>
-              <button
-                onClick={() => setFilterPersonId(null)}
-                className="ml-1 hover:opacity-70 transition-opacity"
-                title={t('clearFilter')}
-              >
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-          )}
-          
-          {(filterCategory || filterPersonId) && (
-            <button
-              onClick={() => {
-                setFilterCategory(null);
-                setFilterPersonId(null);
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm text-[#616f89] dark:text-gray-400">{t('period')}:</label>
+            <Select
+              value={periodType}
+              onChange={(v) => {
+                setPeriodType(v);
+                if (v === 'month') setSelectedPeriod(currentMonth);
+                else if (v === 'year') setSelectedPeriod(String(new Date().getFullYear()));
               }}
-              className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-            >
-              {t('clearAllFilters')}
-            </button>
-          )}
+              options={[
+                { value: 'all', label: t('allOption') },
+                { value: 'month', label: t('periodMonth') },
+                { value: 'year', label: t('periodYear') },
+              ]}
+            />
+            
+            {periodType !== 'all' && periodOptions.length > 0 && (
+              <Select
+                value={selectedPeriod}
+                onChange={(v) => setSelectedPeriod(v)}
+                options={periodOptions}
+              />
+            )}
+          </div>
         </div>
       </Card>
 
@@ -314,14 +427,6 @@ export default function Spreadsheet() {
                 </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
-                  onClick={() => handleSort('person')}
-                >
-                  <div className="flex items-center gap-2">
-                    {t('person')} {getSortIcon('person')}
-                  </div>
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
                   onClick={() => handleSort('amount')}
                 >
                   <div className="flex items-center gap-2">
@@ -331,19 +436,8 @@ export default function Spreadsheet() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
                   {t('currency')}
                 </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
-                  onClick={() => handleSort('type')}
-                >
-                  <div className="flex items-center gap-2">
-                    {t('type')} {getSortIcon('type')}
-                  </div>
-                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
                   {t('notes')}
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
-                  {t('source')}
                 </th>
               </tr>
             </thead>
@@ -355,25 +449,36 @@ export default function Spreadsheet() {
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                   >
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      <button
-                        type="button"
-                        className="hover:underline hover:text-primary"
-                        onClick={() => {
-                          const ym = extractYearMonth(row.date);
-                          if (ym) {
-                            const value = `${String(ym.year)}-${String(ym.month).padStart(2, '0')}`;
-                            if (periodType === 'month' && selectedPeriod === value) {
-                              setPeriodType('all');
-                            } else {
-                              setPeriodType('month');
-                              setSelectedPeriod(value);
+                      <div className="flex items-center gap-2">
+                        <EditableCell
+                          value={row.date}
+                          type={row.type}
+                          row={row}
+                          field="date"
+                          onSave={() => {}}
+                          t={t}
+                          formatMonthYear={formatMonthYear}
+                        />
+                        <button
+                          type="button"
+                          className="hover:underline hover:text-primary text-xs"
+                          onClick={() => {
+                            const ym = extractYearMonth(row.date);
+                            if (ym) {
+                              const value = `${String(ym.year)}-${String(ym.month).padStart(2, '0')}`;
+                              if (periodType === 'month' && selectedPeriod === value) {
+                                setPeriodType('all');
+                              } else {
+                                setPeriodType('month');
+                                setSelectedPeriod(value);
+                              }
                             }
-                          }
-                        }}
-                        title={`${t('filterBy')} ${formatMonthYear(row.date)}`}
-                      >
-                        {formatMonthYear(row.date)}
-                      </button>
+                          }}
+                          title={`${t('filterBy')} ${formatMonthYear(row.date)}`}
+                        >
+                          🔍
+                        </button>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
                       <div className="flex items-center gap-2">
@@ -394,65 +499,44 @@ export default function Spreadsheet() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      {row.personId && personMap.has(row.personId) ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setFilterPersonId(filterPersonId === row.personId ? null : row.personId)}
-                            className={`material-symbols-outlined text-lg transition-all hover:scale-110 cursor-pointer ${
-                              filterPersonId === row.personId ? 'ring-2 ring-primary ring-offset-1 rounded' : ''
-                            }`}
-                            style={{ 
-                              color: personMap.get(row.personId)?.color || '#3b82f6'
-                            }}
-                            title={`${t('filterBy')} ${row.person}`}
-                          >
-                            {personMap.get(row.personId)?.icon || 'person'}
-                          </button>
-                          <span>{row.person}</span>
-                        </div>
-                      ) : row.person ? (
-                        <div className="flex items-center gap-2">
-                          <span 
-                            className="material-symbols-outlined text-lg" 
-                            style={{ color: '#3b82f6' }}
-                          >
-                            person
-                          </span>
-                          <span>{row.person}</span>
-                        </div>
-                      ) : (
-                        <span>-</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      {formatMoney(row.amount, row.currency, { sign: 'none' })}
+                      <EditableCell
+                        value={row.amount}
+                        type={row.type}
+                        row={row}
+                        field="amount"
+                        onSave={() => {}}
+                        t={t}
+                        formatMonthYear={formatMonthYear}
+                      />
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-900">
-                      {row.currency || 'ARS'}
+                      <EditableCell
+                        value={row.currency || 'ARS'}
+                        type={row.type}
+                        row={row}
+                        field="currency"
+                        onSave={() => {}}
+                        t={t}
+                        formatMonthYear={formatMonthYear}
+                      />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
-                          row.type === 'expense'
-                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                            : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        }`}
-                      >
-                        {row.typeLabel}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900 max-w-xs truncate">
-                      {row.notes || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
-                      {row.source || '-'}
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900 max-w-xs">
+                      <EditableCell
+                        value={row.notes || ''}
+                        type={row.type}
+                        row={row}
+                        field="notes"
+                        onSave={() => {}}
+                        t={t}
+                        formatMonthYear={formatMonthYear}
+                      />
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-sm text-[#616f89] dark:text-gray-400">
+                  <td colSpan="5" className="px-4 py-8 text-center text-sm text-[#616f89] dark:text-gray-400">
                     {t('noData')}
                   </td>
                 </tr>

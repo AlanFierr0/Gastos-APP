@@ -7,7 +7,7 @@ import { formatDate, formatMoney } from '../utils/format.js';
 import ExchangeRates from '../components/ExchangeRates.jsx';
 
 export default function Investments() {
-  const { investments, addInvestment, updateInvestment, removeInvestment, t, persons, investmentSummary } = useApp();
+  const { investments, addInvestment, updateInvestment, removeInvestment, t, investmentSummary } = useApp();
   const [showForm, setShowForm] = useState(false);
   const { register, handleSubmit, reset, setValue } = useForm();
   const [editingId, setEditingId] = useState(null);
@@ -29,7 +29,6 @@ export default function Investments() {
   const columns = [
     { key: 'type', header: t('type') },
     { key: 'name', header: t('name') },
-    { key: 'person', header: t('person') },
     { key: 'amount', header: t('invested') },
     { key: 'value', header: t('currentValue') },
     { key: 'profit', header: t('profit') },
@@ -44,7 +43,6 @@ export default function Investments() {
       value: Number(values.value),
       currency: values.currency || 'ARS',
       date: values.date,
-      personId: values.personId || undefined,
       notes: values.notes || undefined,
     };
     if (editingId) {
@@ -77,7 +75,6 @@ export default function Investments() {
     setValue('value', row.value);
     setValue('currency', row.currency || 'ARS');
     setValue('date', (typeof row.date === 'string' ? row.date : new Date(row.date).toISOString()).slice(0, 10));
-    setValue('personId', row.personId || '');
     setValue('notes', row.notes || '');
   }
 
@@ -91,7 +88,6 @@ export default function Investments() {
       id: inv.id,
       type: investmentTypes.find(t => t.value === inv.type)?.label || inv.type,
       name: inv.name,
-      person: inv.person?.name || '-',
       amount: formatMoney(inv.amount, inv.currency || 'ARS'),
       value: formatMoney(inv.value, inv.currency || 'ARS'),
       profit: (
@@ -101,7 +97,6 @@ export default function Investments() {
       ),
       date: formatDate(inv.date),
       currency: inv.currency,
-      personId: inv.personId,
       notes: inv.notes,
       rawAmount: inv.amount,
       rawValue: inv.value,
@@ -206,15 +201,6 @@ export default function Investments() {
                 <input type="date" {...register('date', { required: true })} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" />
                 <button type="button" onClick={setToday} className="h-9 px-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">Today</button>
               </div>
-            </div>
-            <div className="flex flex-col gap-1 md:col-span-2">
-              <label className="text-sm text-[#616f89]">{t('person')}</label>
-              <select {...register('personId')} className="form-select rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
-                <option value="">-</option>
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
             </div>
             <div className="flex flex-col gap-1 md:col-span-4">
               <label className="text-sm text-[#616f89]">{t('notes')}</label>

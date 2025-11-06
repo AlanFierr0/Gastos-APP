@@ -8,11 +8,10 @@ import { formatDate } from '../utils/format.js';
 import { useLocation } from 'react-router-dom';
 
 export default function Expenses() {
-  const { expenses, addExpense, updateExpense, removeExpense, t, persons, categories, locale } = useApp();
+  const { expenses, addExpense, updateExpense, removeExpense, t, categories, locale } = useApp();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [personFilter, setPersonFilter] = useState('');
   const [periodType, setPeriodType] = useState('all'); // all | month | year
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   const [showForm, setShowForm] = useState(location.state?.openForm || false);
@@ -28,9 +27,6 @@ export default function Expenses() {
       window.history.replaceState({}, document.title);
     }
     // Apply incoming filters (from Dashboard or elsewhere)
-    if (location.state?.filterPersonId) {
-      setPersonFilter(location.state.filterPersonId);
-    }
     if (location.state?.periodType) {
       setPeriodType(location.state.periodType);
     }
@@ -49,12 +45,6 @@ export default function Expenses() {
   const expenseCategories = useMemo(() => {
     return (categories || []).filter((c) => String(c?.type?.name || '').toLowerCase() === 'expense');
   }, [categories]);
-
-  const personMap = useMemo(() => {
-    const map = new Map();
-    (persons || []).forEach(p => map.set(p.id, p));
-    return map;
-  }, [persons]);
 
   // Period options
   const selectedYear = useMemo(() => {
@@ -77,15 +67,13 @@ export default function Expenses() {
       const q = query.toLowerCase();
       const matchesQ = !q || String(r.notes || '').toLowerCase().includes(q);
       const matchesC = !categoryFilter || r.category?.id === categoryFilter;
-      const matchesP = !personFilter || r.personId === personFilter;
-      return matchesQ && matchesC && matchesP;
+      return matchesQ && matchesC;
     });
-  }, [periodExpenses, query, categoryFilter, personFilter]);
+  }, [periodExpenses, query, categoryFilter]);
 
   const columns = [
     { key: 'date', header: t('date') },
     { key: 'categoryName', header: t('category') },
-    { key: 'person', header: t('person') },
     { key: 'amount', header: t('amount') },
     { key: 'notes', header: t('notes') },
   ];
@@ -97,7 +85,6 @@ export default function Expenses() {
       currency: values.currency || 'ARS',
       date: values.date,
       notes: values.notes,
-      personId: values.personId,
     };
     if (editingId) {
       await updateExpense(editingId, payload);
@@ -154,7 +141,6 @@ export default function Expenses() {
     setValue('currency', row.currency || 'ARS');
     setValue('date', (row.rawDate || row.date || '').slice(0, 10));
     setValue('notes', row.notes || '');
-    setValue('personId', row.person?.id || row.personId || '');
   }
 
   return (
@@ -174,12 +160,6 @@ export default function Expenses() {
             <option value="">{t('allOption')}</option>
             {expenseCategories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <select className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}>
-            <option value="">{t('allOption')}</option>
-            {persons.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           <div className="flex items-center gap-2 ml-auto">
@@ -253,15 +233,6 @@ export default function Expenses() {
               </div>
             </div>
             <div className="flex flex-col gap-1 md:col-span-4">
-              <label className="text-sm text-[#616f89]">Person</label>
-              <select {...register('personId', { required: true })} className="form-select rounded-xl bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary">
-                <option value="">Select a person</option>
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1 md:col-span-4">
               <label className="text-sm text-[#616f89]">Notes</label>
               <input {...register('notes')} className="form-input rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:ring-primary" placeholder="Optional note" />
             </div>
@@ -278,9 +249,6 @@ export default function Expenses() {
           rows={filtered.map((r) => {
             const ym = extractYearMonth(r.date);
             const monthLabel = ym ? formatMonthYear(new Date(Date.UTC(ym.year, ym.month - 1, 15))) : formatDate(r.date);
-            const personObj = personMap.get(r.personId);
-            const personColor = personObj?.color || '#3b82f6';
-            const personIcon = personObj?.icon || 'person';
             const categoryName = r.category?.name ?? '';
             return {
               id: r.id,
@@ -312,23 +280,9 @@ export default function Expenses() {
                   <span>{categoryName || '-'}</span>
                 </div>
               ),
-              person: (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPersonFilter(personFilter === r.personId ? '' : (r.personId || ''))}
-                    className={`material-symbols-outlined text-lg transition-all hover:scale-110 cursor-pointer ${personFilter === r.personId ? 'ring-2 ring-primary ring-offset-1 rounded' : ''}`}
-                    style={{ color: personColor }}
-                    title={`${t('filterBy')} ${r.person?.name || ''}`}
-                  >
-                    {personIcon}
-                  </button>
-                  <span>{r.person?.name || '-'}</span>
-                </div>
-              ),
               amount: formatMoney(r.amount, r.currency || 'ARS'),
               notes: r.notes,
               currency: r.currency,
-              personId: r.personId,
               category: r.category,
               rawAmount: r.amount,
               rawDate: typeof r.date === 'string' ? r.date : new Date(r.date).toISOString(),

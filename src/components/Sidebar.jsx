@@ -20,6 +20,10 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">table_chart</span>
           <span className="text-sm font-medium">{t('spreadsheet')}</span>
         </NavLink>
+        <NavLink className={linkClass} to="/grid">
+          <span className="material-symbols-outlined">grid_on</span>
+          <span className="text-sm font-medium">{t('grid') || 'Grilla'}</span>
+        </NavLink>
         <NavLink className={linkClass} to="/dashboard">
           <span className="material-symbols-outlined">dashboard</span>
           <span className="text-sm font-medium">{t('dashboard')}</span>
@@ -31,10 +35,6 @@ export default function Sidebar() {
         <NavLink className={linkClass} to="/income">
           <span className="material-symbols-outlined">account_balance_wallet</span>
           <span className="text-sm font-medium">{t('income')}</span>
-        </NavLink>
-        <NavLink className={linkClass} to="/people">
-          <span className="material-symbols-outlined">group</span>
-          <span className="text-sm font-medium">{t('people')}</span>
         </NavLink>
         <NavLink className={linkClass} to="/investments">
           <span className="material-symbols-outlined">trending_up</span>

@@ -4,17 +4,21 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ee5962b1-1427-49bb-bd51-ce3b98b76c03" name="Changes" comment="feat: enhance financial analysis and data handling with localization support">
+    <list default="true" id="ee5962b1-1427-49bb-bd51-ce3b98b76c03" name="Changes" comment="feat: add clickable chart functionality and update cursor styles for interactivity">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/api/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/index.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/Chart.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/Chart.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/Sidebar.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/Sidebar.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/context/AppContext.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/context/AppContext.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/i18n.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/i18n.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Dashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Dashboard.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Expenses.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Expenses.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Income.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Income.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pages/Investments.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Investments.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/People.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/People.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pages/Spreadsheet.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Spreadsheet.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pages/Upload.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/pages/Upload.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/format.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/format.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -30,12 +34,12 @@
     &quot;assignee&quot;: &quot;AlanFierr0&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/AlanFierr0/Gastos-APP.git&quot;,
-    &quot;accountId&quot;: &quot;ca82f5fb-71b5-4f88-8380-5464a21a6acd&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/AlanFierr0/Gastos-APP.git",
+    "accountId": "5c0f43b5-ed79-431a-8124-4973cb193348"
   }
-}</component>
+}]]></component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -99,6 +103,7 @@
       <workItem from="1762187275209" duration="6929000" />
       <workItem from="1762201120882" duration="16000" />
       <workItem from="1762202172005" duration="372000" />
+      <workItem from="1762391968280" duration="8741000" />
     </task>
     <task id="LOCAL-00001" summary="feat: enhance financial analysis and data handling with localization support">
       <option name="closed" value="true" />
@@ -108,7 +113,39 @@
       <option name="project" value="LOCAL" />
       <updated>1762190710327</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="feat: enhance financial analysis and data handling with localization support">
+      <option name="closed" value="true" />
+      <created>1762325946880</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1762325946880</updated>
+    </task>
+    <task id="LOCAL-00003" summary="refactor: remove debug console logs and clean up code">
+      <option name="closed" value="true" />
+      <created>1762326730870</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1762326730870</updated>
+    </task>
+    <task id="LOCAL-00004" summary="feat: add filtering options for income and expenses, enhance chart interactivity">
+      <option name="closed" value="true" />
+      <created>1762328087457</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1762328087457</updated>
+    </task>
+    <task id="LOCAL-00005" summary="feat: add clickable chart functionality and update cursor styles for interactivity">
+      <option name="closed" value="true" />
+      <created>1762328420440</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1762328420440</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -120,7 +157,11 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
+    <MESSAGE value="feat: implement investment management features and enhance currency handling" />
     <MESSAGE value="feat: enhance financial analysis and data handling with localization support" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: enhance financial analysis and data handling with localization support" />
+    <MESSAGE value="refactor: remove debug console logs and clean up code" />
+    <MESSAGE value="feat: add filtering options for income and expenses, enhance chart interactivity" />
+    <MESSAGE value="feat: add clickable chart functionality and update cursor styles for interactivity" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add clickable chart functionality and update cursor styles for interactivity" />
   </component>
 </project>
