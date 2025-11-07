@@ -4,6 +4,14 @@ import Card from '../components/Card.jsx';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import * as api from '../api/index.js';
 
+function prettifyCategoryName(name) {
+  return String(name || '')
+    .split(/\s+/)
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+    .join(' ')
+    .trim();
+}
+
 function useFAConfig(categories) {
   const [config, setConfig] = React.useState({
     fixed: [],
@@ -212,10 +220,11 @@ export default function FinancialAnalysis() {
       .map((c) => {
         const lower = String(c.name || '').toLowerCase();
         const checked = (config[bucket] || []).includes(lower);
+        const displayName = prettifyCategoryName(c.name);
         return (
           <label key={`${bucket}-${lower}`} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
             <input type="checkbox" checked={checked} onChange={() => toggle(bucket, lower)} />
-            <span className="text-sm">{c.name}</span>
+            <span className="text-sm">{displayName}</span>
           </label>
         );
       });
@@ -223,7 +232,10 @@ export default function FinancialAnalysis() {
 
   const bucketSummary = (bucket) => {
     const sel = (config[bucket] || []);
-    const shown = sel.slice(0, 5).join(', ');
+    const shown = sel
+      .slice(0, 5)
+      .map(prettifyCategoryName)
+      .join(', ');
     const extra = sel.length > 5 ? ` +${sel.length - 5}` : '';
     return (
       <div className="text-sm text-[#616f89] dark:text-gray-400">
