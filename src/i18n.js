@@ -92,6 +92,7 @@ export const dictionaries = {
     period: 'Period',
     periodMonth: 'Month',
     periodYear: 'Year',
+    allYears: 'All years',
     // Spreadsheet page
     spreadsheet: 'Spreadsheet',
     spreadsheetTitle: 'Data Spreadsheet',
@@ -265,6 +266,9 @@ export const dictionaries = {
     period: 'Período',
     periodMonth: 'Mes',
     periodYear: 'Año',
+    allYears: 'Todos los años',
+    search: 'Buscar',
+    searchCategoryOrConcept: 'Categoría o concepto',
     // Spreadsheet page
     spreadsheet: 'Planilla',
     spreadsheetTitle: 'Planilla de Datos',

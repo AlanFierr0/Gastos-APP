@@ -1,14 +1,16 @@
 # Gastos-APP
 
-Frontend para página de gestión de gastos construido con Next.js, TypeScript y Tailwind CSS.
+Frontend para página de gestión de gastos construido con React, Vite y Tailwind CSS.
+
+> Consulta `../DEV_NOTES.md` para convenciones de desarrollo y checklist de QA.
 
 ## Características
 
-- 📊 **Dashboard**: Vista general con estadísticas y tabla de gastos
-- 📤 **Upload**: Subida de archivos Excel para importar gastos
-- 📈 **Analytics**: Gráficos interactivos y análisis detallado de gastos
-- 🔍 **Filtros**: Búsqueda y filtrado de datos en tablas
-- 📱 **Responsive**: Diseño adaptativo para todos los dispositivos
+- **Dashboard**: Vista general con estadísticas y tabla de gastos
+- **Upload**: Subida de archivos Excel para importar gastos
+- **Analytics**: Gráficos interactivos y análisis detallado de gastos
+- **Filtros**: Búsqueda y filtrado de datos en tablas
+- **Responsive**: Diseño adaptativo para todos los dispositivos
 
 ## Tecnologías
 
@@ -160,7 +162,7 @@ interface Gasto {
 
 ## Seguridad
 
-⚠️ **Nota sobre Vulnerabilidades**: El proyecto usa `xlsx@0.18.5` que tiene vulnerabilidades conocidas. Se recomienda actualizar a una versión más reciente cuando esté disponible o usar alternativas como `exceljs`.
+**Advertencia sobre vulnerabilidades**: El proyecto usa `xlsx@0.18.5`, versión con fallos conocidos. Se recomienda actualizar cuando sea posible o usar alternativas como `exceljs`.
 
 ## Contribuir
 

@@ -189,6 +189,7 @@ export default function Spreadsheet() {
   const [sortOrder, setSortOrder] = useState('desc');
   const [filterType, setFilterType] = useState('all'); // 'all', 'expense', 'income'
   const [filterCategory, setFilterCategory] = useState(location.state?.filterCategory || null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [periodType, setPeriodType] = useState('all'); // 'all', 'month', 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
   
@@ -260,8 +261,16 @@ export default function Spreadsheet() {
     if (filterCategory) {
       data = data.filter((d) => d.category === filterCategory);
     }
+    if (searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      data = data.filter((d) => {
+        const categoryMatch = String(d.category || '').toLowerCase().includes(q);
+        const conceptMatch = String(d.concept || '').toLowerCase().includes(q);
+        return categoryMatch || conceptMatch;
+      });
+    }
     return data;
-  }, [allData, filterType, filterCategory]);
+  }, [allData, filterType, filterCategory, searchTerm]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -341,8 +350,9 @@ export default function Spreadsheet() {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm text-[#616f89] dark:text-gray-400">{t('type')}:</label>
+            <label className="text-sm text-[#616f89] dark:text-gray-400" htmlFor="spreadsheet-type-select">{t('type')}:</label>
             <Select
+              id="spreadsheet-type-select"
               value={filterType}
               onChange={(v) => setFilterType(v)}
               options={[
@@ -351,7 +361,19 @@ export default function Spreadsheet() {
                 { value: 'income', label: t('income') },
               ]}
             />
-            
+
+            <label className="text-sm text-[#616f89] dark:text-gray-400" htmlFor="spreadsheet-search">
+              {t('search') || 'Buscar'}
+            </label>
+            <input
+              id="spreadsheet-search"
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('searchCategoryOrConcept') || 'Categoría o concepto'}
+              className="w-52 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-transparent focus:border-primary focus:outline-none text-sm"
+            />
+
             {filterCategory && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
                 <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(filterCategory) }} />
@@ -365,10 +387,13 @@ export default function Spreadsheet() {
                 </button>
               </div>
             )}
-            
-            {filterCategory && (
+
+            {(filterCategory || searchTerm) && (
               <button
-                onClick={() => setFilterCategory(null)}
+                onClick={() => {
+                  setFilterCategory(null);
+                  setSearchTerm('');
+                }}
                 className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
               >
                 {t('clearAllFilters')}
@@ -513,8 +538,8 @@ export default function Spreadsheet() {
                             }
                           }}
                           title={`${t('filterBy')} ${formatMonthYear(row.date)}`}
-                        >
-                          🔍
+                          >
+                          {t('view') || 'Ver'}
                         </button>
                       </div>
                     </td>

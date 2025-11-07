@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import Card from '../components/Card.jsx';
 import {useApp} from '../context/AppContext.jsx';
-import {formatMoney} from '../utils/format.js';
+import {formatMoney, capitalizeWords} from '../utils/format.js';
 import {useNavigate} from 'react-router-dom';
 import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import Select from '../components/Select.jsx';
@@ -159,7 +159,7 @@ export default function Dashboard() {
 
     // Convertir a array y mantener solo categorías con total positivo
     let allData = Array.from(map.entries())
-      .map(([name, value]) => ({ name: capitalizeFirst(name), value: Number(value) }))
+      .map(([name, value]) => ({ name: capitalizeWords(name), value: Number(value) }))
       .filter(item => item.value > 0);
 
     if (allData.length === 0) return [];
@@ -381,12 +381,6 @@ export default function Dashboard() {
     </div>
   );
 }
-
-function capitalizeFirst(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-}
-
 function getLastNonForecastMonth() {
   const now = new Date();
   let year, month;

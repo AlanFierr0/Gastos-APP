@@ -62,7 +62,7 @@ export default function Upload() {
       
       let message = '';
       if (records.length === 0) {
-        message = '⚠️ El archivo se procesó correctamente pero no se encontraron registros válidos.';
+        message = 'Advertencia: El archivo se procesó correctamente pero no se encontraron registros válidos.';
       }
       
       // Show errors and warnings from preview
@@ -84,7 +84,7 @@ export default function Upload() {
       
       if (result.warnings && result.warnings.length > 0) {
         message += message ? '\n\n' : '';
-        message += `⚠️ Advertencias encontradas durante el análisis (${result.warnings.length}):\n`;
+        message += `Advertencias encontradas durante el análisis (${result.warnings.length}):\n`;
         result.warnings.slice(0, 10).forEach((warn, idx) => {
           const warnInfo = warn.item || warn.category || 'Desconocido';
           const sheetInfo = warn.sheet ? ` hoja ${warn.sheet}` : '';
@@ -160,7 +160,7 @@ export default function Upload() {
       }
       
       if (result.warnings && result.warnings.length > 0) {
-        message += `\n⚠️ Advertencias (${result.warnings.length}):\n`;
+        message += `\nAdvertencias (${result.warnings.length}):\n`;
         result.warnings.forEach((warn, idx) => {
           const warnInfo = warn.item || warn.category || 'Desconocido';
           const sheetInfo = warn.sheet ? ` hoja ${warn.sheet}` : '';
@@ -297,11 +297,11 @@ export default function Upload() {
 
       {status && (
         <Card className={
-          status.includes('✅') || status.includes(t('importSuccess')?.slice(0, 10) || '') || status.includes('exitosamente')
+          status.includes(t('importSuccess')?.slice(0, 10) || '') || status.includes('exitosamente')
             ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20'
             : status.includes('❌') || status.includes(t('uploadFailed')?.slice(0, 5) || '') || status.includes('Error') || status.includes('error')
             ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
-            : status.includes('⚠️') || status.includes('Advertencia') || status.includes('Warning')
+            : status.includes('Advertencia') || status.includes('Warning')
             ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20'
             : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/30'
         }>

@@ -3,14 +3,7 @@ import { useApp } from '../context/AppContext.jsx';
 import Card from '../components/Card.jsx';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import * as api from '../api/index.js';
-
-function prettifyCategoryName(name) {
-  return String(name || '')
-    .split(/\s+/)
-    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
-    .join(' ')
-    .trim();
-}
+import { capitalizeWords } from '../utils/format.js';
 
 function useFAConfig(categories) {
   const [config, setConfig] = React.useState({
@@ -105,7 +98,7 @@ function useFAConfig(categories) {
         }
       })();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [allCategoryNames.join('|'), loading]);
 
   return { config, toggle, setTarget, formatTargetValue, loading };
@@ -220,7 +213,7 @@ export default function FinancialAnalysis() {
       .map((c) => {
         const lower = String(c.name || '').toLowerCase();
         const checked = (config[bucket] || []).includes(lower);
-        const displayName = prettifyCategoryName(c.name);
+        const displayName = capitalizeWords(c.name);
         return (
           <label key={`${bucket}-${lower}`} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800">
             <input type="checkbox" checked={checked} onChange={() => toggle(bucket, lower)} />
@@ -234,7 +227,7 @@ export default function FinancialAnalysis() {
     const sel = (config[bucket] || []);
     const shown = sel
       .slice(0, 5)
-      .map(prettifyCategoryName)
+      .map(capitalizeWords)
       .join(', ');
     const extra = sel.length > 5 ? ` +${sel.length - 5}` : '';
     return (
@@ -264,7 +257,7 @@ export default function FinancialAnalysis() {
               {t('fixedExpense') || 'Gasto fijo'}
             </h3>
             {!collapsed.fixed ? (
-              <div className="max-h-64 overflow-auto rounded border border-gray-200 dark:border-gray-700">
+              <div className="max-h-48 overflow-auto rounded border border-gray-200 dark:border-gray-700">
                 {catList('fixed')}
               </div>
             ) : (
@@ -303,7 +296,7 @@ export default function FinancialAnalysis() {
               {t('wellbeing') || 'Bienestar'}
             </h3>
             {!collapsed.wellbeing ? (
-              <div className="max-h-64 overflow-auto rounded border border-gray-200 dark:border-gray-700">
+              <div className="max-h-48 overflow-auto rounded border border-gray-200 dark:border-gray-700">
                 {catList('wellbeing')}
               </div>
             ) : (
@@ -342,7 +335,7 @@ export default function FinancialAnalysis() {
               {t('saving') || 'Ahorro'}
             </h3>
             {!collapsed.saving ? (
-              <div className="max-h-64 overflow-auto rounded border border-gray-200 dark:border-gray-700">
+              <div className="max-h-48 overflow-auto rounded border border-gray-200 dark:border-gray-700">
                 {catList('saving')}
               </div>
             ) : (

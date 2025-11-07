@@ -17,6 +17,29 @@ export function formatMoney(amount, currency = 'ARS', { sign = 'auto' } = {}) {
   return (num < 0 ? '-' : '') + formatted;
 }
 
+export function formatMoneyNoDecimals(amount, currency = 'ARS', { sign = 'auto' } = {}) {
+  const num = Number(amount || 0);
+  const locale = currency === 'ARS' ? 'es-AR' : undefined;
+  const formatter = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  const formatted = formatter.format(Math.abs(num));
+  if (sign === 'none') return formatted;
+  if (sign === 'always') return (num < 0 ? '-' : '+') + formatted;
+  return (num < 0 ? '-' : '') + formatted;
+}
+
+export function capitalizeWords(value) {
+  return String(value || '')
+    .split(/\s+/)
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ''))
+    .join(' ') 
+    .trim();
+}
+
 const ARG_TZ = 'America/Argentina/Buenos_Aires';
 
 export function formatDate(input) {

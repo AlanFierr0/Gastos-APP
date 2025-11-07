@@ -1,25 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext.jsx';
-
-function formatMoneyNoDecimals(amount, currency = 'ARS', { sign = 'auto' } = {}) {
-  const num = Number(amount || 0);
-  const locale = currency === 'ARS' ? 'es-AR' : undefined;
-  const formatter = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-  const formatted = formatter.format(Math.abs(num));
-  if (sign === 'none') return formatted;
-  if (sign === 'always') return (num < 0 ? '-' : '+') + formatted;
-  return (num < 0 ? '-' : '') + formatted;
-}
-
-function capitalizeFirst(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-}
+import { formatMoneyNoDecimals, capitalizeWords } from '../utils/format.js';
 
 function isForecastMonth(monthKey) {
   // monthKey format: "YYYY-MM"
@@ -588,7 +569,7 @@ export default function Grid() {
                         <span className="material-symbols-outlined text-xs absolute left-0" style={{ transform: expandedCategory === `${gridType}-${row.key}` ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
                           chevron_right
                         </span>
-                        <span className="truncate">{capitalizeFirst(row.key)}</span>
+                        <span className="truncate">{capitalizeWords(row.key)}</span>
                       </div>
                     </td>
                     {months.map((monthKey, index) => {
@@ -611,7 +592,7 @@ export default function Grid() {
                     <tr>
                       <td colSpan={months.length + 2} className="border border-gray-200 dark:border-gray-700 p-0 bg-gray-50 dark:bg-gray-800/50">
                         <div className="p-4">
-                          <h4 className="font-semibold text-sm mb-3">{t('details') || 'Detalles'} - {capitalizeFirst(row.key)}</h4>
+                          <h4 className="font-semibold text-sm mb-3">{t('details') || 'Detalles'} - {capitalizeWords(row.key)}</h4>
                           <div className="overflow-x-auto border border-gray-300 dark:border-gray-700 rounded-lg">
                             <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
                               <thead className="bg-indigo-100 dark:bg-indigo-900/40">
@@ -668,7 +649,7 @@ export default function Grid() {
                                         <tr key={`concept-${idx}`} className="border-b-2 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20">
                                         <td className="sticky left-0 border-r-2 border-indigo-300 dark:border-indigo-600 px-1.5 py-1 text-xs text-center bg-white dark:bg-gray-900 z-10" style={{ width: 100, minWidth: 100 }}>
                                           <div className="flex items-center justify-center gap-1">
-                                            <span className="truncate">{capitalizeFirst(concept.label)}</span>
+                                            <span className="truncate">{capitalizeWords(concept.label)}</span>
                                           </div>
                                         </td>
                                         {months.map((monthKey, index) => {
