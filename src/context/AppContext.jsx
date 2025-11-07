@@ -7,8 +7,6 @@ const AppContext = createContext(null);
 export function AppProvider({ children }) {
   const [expenses, setExpenses] = useState([]);
   const [income, setIncome] = useState([]);
-  const [investments, setInvestments] = useState([]);
-  const [investmentSummary, setInvestmentSummary] = useState(null);
   const [categories, setCategories] = useState([]);
   const [exchangeRates, setExchangeRates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -28,18 +26,14 @@ export function AppProvider({ children }) {
     (async () => {
       try {
         setLoading(true);
-        const [e, i, inv, invSum, c, ex] = await Promise.allSettled([
+        const [e, i, c, ex] = await Promise.allSettled([
           api.getExpenses(), 
           api.getIncome(), 
-          api.getInvestments(),
-          api.getInvestmentSummary(),
           api.getCategories(),
           api.getExchangeRates()
         ]);
         if (e.status === 'fulfilled') setExpenses(e.value);
         if (i.status === 'fulfilled') setIncome(i.value);
-        if (inv.status === 'fulfilled') setInvestments(inv.value);
-        if (invSum.status === 'fulfilled') setInvestmentSummary(invSum.value);
         if (c.status === 'fulfilled') setCategories(c.value);
         if (ex.status === 'fulfilled') setExchangeRates(ex.value);
       } catch (err) {
@@ -92,14 +86,10 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     expenses,
     income,
-    investments,
-    investmentSummary,
     categories,
     exchangeRates,
     setExpenses,
     setIncome,
-    setInvestments,
-    setInvestmentSummary,
     setCategories,
     setExchangeRates,
     loading,
@@ -265,61 +255,9 @@ export function AppProvider({ children }) {
         setExchangeRates(data || []);
       } catch {}
     },
-    async addInvestment(newInvestment) {
-      const optimistic = {
-        id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
-        ...newInvestment,
-      };
-      setInvestments((prev) => [optimistic, ...prev]);
-      try {
-        const saved = await api.createInvestment(newInvestment);
-        if (saved && saved.id) {
-          setInvestments((prev) => [saved, ...prev.filter((inv) => inv.id !== optimistic.id)]);
-          // Refresh summary
-          const summary = await api.getInvestmentSummary();
-          setInvestmentSummary(summary);
-        }
-      } catch {
-        // keep optimistic if backend not available
-      }
-    },
-    async updateInvestment(id, updates) {
-      const optimistic = { ...updates, id };
-      setInvestments((prev) => prev.map((inv) => (inv.id === id ? { ...inv, ...optimistic } : inv)));
-      try {
-        const saved = await api.updateInvestment(id, updates);
-        if (saved && saved.id) {
-          setInvestments((prev) => prev.map((inv) => (inv.id === id ? saved : inv)));
-          // Refresh summary
-          const summary = await api.getInvestmentSummary();
-          setInvestmentSummary(summary);
-        }
-      } catch {}
-    },
-    async removeInvestment(id) {
-      setInvestments((prev) => prev.filter((inv) => inv.id !== id));
-      try { 
-        await api.deleteInvestment(id);
-        // Refresh summary
-        const summary = await api.getInvestmentSummary();
-        setInvestmentSummary(summary);
-      } catch {}
-    },
-    async refreshInvestments() {
-      try {
-        const [data, summary] = await Promise.all([
-          api.getInvestments(),
-          api.getInvestmentSummary(),
-        ]);
-        setInvestments(data || []);
-        setInvestmentSummary(summary);
-      } catch {}
-    },
   }), [
     expenses,
     income,
-    investments,
-    investmentSummary,
     categories,
     exchangeRates,
     loading,
@@ -329,8 +267,6 @@ export function AppProvider({ children }) {
     theme,
     setExpenses,
     setIncome,
-    setInvestments,
-    setInvestmentSummary,
     setCategories,
     setExchangeRates,
     setTheme,
@@ -342,14 +278,10 @@ export function AppProvider({ children }) {
   const contextValue = value || {
     expenses: [],
     income: [],
-    investments: [],
-    investmentSummary: null,
     categories: [],
     exchangeRates: [],
     setExpenses: () => {},
     setIncome: () => {},
-    setInvestments: () => {},
-    setInvestmentSummary: () => {},
     setCategories: () => {},
     setExchangeRates: () => {},
     loading: false,

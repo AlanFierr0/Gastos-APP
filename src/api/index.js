@@ -65,17 +65,6 @@ export async function getExchangeRates() {
   }
 }
 
-export async function getExchangeRateHistory(code, year) {
-  try {
-    const params = {};
-    if (code) params.code = code;
-    if (year) params.year = year;
-    const { data } = await http.get('/exchange-rates/history', { params });
-    return data || [];
-  } catch {
-    return [];
-  }
-}
 
 export async function createExpense(payload) {
   const { data } = await http.post('/expenses', payload);
@@ -107,38 +96,6 @@ export async function deleteIncome(id) {
   return data;
 }
 
-export async function getInvestments() {
-  try {
-    const { data } = await http.get('/investments');
-    return data || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function getInvestmentSummary() {
-  try {
-    const { data } = await http.get('/investments/summary');
-    return data || { totalValue: 0, totalInvested: 0, profit: 0 };
-  } catch {
-    return { totalValue: 0, totalInvested: 0, profit: 0 };
-  }
-}
-
-export async function createInvestment(payload) {
-  const { data } = await http.post('/investments', payload);
-  return data;
-}
-
-export async function updateInvestment(id, payload) {
-  const { data } = await http.patch(`/investments/${id}`, payload);
-  return data;
-}
-
-export async function deleteInvestment(id) {
-  const { data } = await http.delete(`/investments/${id}`);
-  return data;
-}
 
 export async function getFAConfig() {
   try {

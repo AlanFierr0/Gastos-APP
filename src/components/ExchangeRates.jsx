@@ -1,14 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { formatMoney } from '../utils/format.js';
 import Card from './Card.jsx';
-import * as api from '../api/index.js';
 
 export default function ExchangeRates() {
   const { exchangeRates, refreshExchangeRates, t } = useApp();
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyData, setHistoryData] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -47,23 +43,6 @@ export default function ExchangeRates() {
     };
   }, [refreshExchangeRates]);
 
-  const loadHistory = async () => {
-    if (showHistory) {
-      setShowHistory(false);
-      return;
-    }
-    setLoadingHistory(true);
-    try {
-      const data = await api.getExchangeRateHistory();
-      setHistoryData(data);
-      setShowHistory(true);
-    } catch (error) {
-      // Failed to load history silently ignored
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
-
   const formatDate = (dateString) => {
     if (!dateString) return '';
     try {
@@ -87,14 +66,6 @@ export default function ExchangeRates() {
   if (mainRates.length === 0) {
     return null;
   }
-
-  const formatMonth = (month) => {
-    const months = [
-      t('january'), t('february'), t('march'), t('april'), t('may'), t('june'),
-      t('july'), t('august'), t('september'), t('october'), t('november'), t('december')
-    ];
-    return months[month - 1] || month;
-  };
 
   return (
     <Card title={t('exchangeRates')}>
@@ -139,44 +110,6 @@ export default function ExchangeRates() {
           </div>
         ))}
       </div>
-      
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={loadHistory}
-          disabled={loadingHistory}
-          className="text-sm text-primary hover:underline disabled:opacity-50"
-        >
-          {loadingHistory ? t('loading') : showHistory ? t('hideHistory') : t('showHistory')}
-        </button>
-      </div>
-
-      {showHistory && historyData.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <h4 className="text-sm font-semibold mb-3">{t('historicalData')}</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left p-2">{t('rate')}</th>
-                  <th className="text-left p-2">{t('period')}</th>
-                  <th className="text-left p-2">{t('buy')}</th>
-                  <th className="text-left p-2">{t('sell')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyData.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-200 dark:border-gray-700">
-                    <td className="p-2">{item.name}</td>
-                    <td className="p-2">{formatMonth(item.month)} {item.year}</td>
-                    <td className="p-2">{formatMoney(item.buy, 'ARS', { sign: 'none' })}</td>
-                    <td className="p-2">{formatMoney(item.sell, 'ARS', { sign: 'none' })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </Card>
   );
 }

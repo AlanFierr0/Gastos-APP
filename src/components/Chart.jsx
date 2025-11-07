@@ -72,7 +72,7 @@ export function LineSeries({ data, unitLabel = 'ARS' }) {
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" />
           <YAxis tickFormatter={formatYAxisValue} />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip cursor={{ fill: 'transparent' }} content={<CustomTooltip />} />
           <Line type="monotone" dataKey="income" stroke="#135bec" strokeWidth={2} />
           <Line type="monotone" dataKey="expenses" stroke="#50E3C2" strokeWidth={2} />
         </LineChart>
@@ -250,7 +250,9 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={tickRenderer ? tickRenderer : <XTick />} interval={0} />
           <YAxis tickFormatter={formatYAxisValue} />
-          <Tooltip content={customTooltip || (tooltipLabelFromDatum ? (
+          <Tooltip 
+            cursor={{ fill: 'transparent' }}
+            content={customTooltip || (tooltipLabelFromDatum ? (
             ({ active, payload }) => {
               if (active && payload && payload.length) {
                 const isDark = document.documentElement.classList.contains('dark');

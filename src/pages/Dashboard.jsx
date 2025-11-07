@@ -7,7 +7,7 @@ import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import Select from '../components/Select.jsx';
 
 export default function Dashboard() {
-  const { expenses, income, investmentSummary, t } = useApp();
+  const { expenses, income, t } = useApp();
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getLastNonForecastMonth());
   const navigate = useNavigate();
@@ -71,7 +71,7 @@ export default function Dashboard() {
       : filterByYear(expenses, income, Number(effectivePeriod)); // Always exclude forecast for year view
   }, [expenses, income, periodType, effectivePeriod, isForecastPeriod]);
 
-  const monthTotals = useMemo(() => computeTotals(periodExpenses, periodIncome, investmentSummary), [periodExpenses, periodIncome, investmentSummary]);
+  const monthTotals = useMemo(() => computeTotals(periodExpenses, periodIncome), [periodExpenses, periodIncome]);
 
   const previousPeriodTotals = useMemo(() => {
     let prevPeriod;
@@ -91,9 +91,9 @@ export default function Dashboard() {
     const prev = periodType === 'month'
       ? filterByMonth(expenses, income, prevPeriod)
       : filterByYear(expenses, income, Number(prevPeriod));
-    const totals = computeTotals(prev.periodExpenses, prev.periodIncome, investmentSummary);
+    const totals = computeTotals(prev.periodExpenses, prev.periodIncome);
     return { ...totals, periodLabel: prevPeriodLabel };
-  }, [periodType, effectivePeriod, expenses, income, investmentSummary, periodOptions]);
+  }, [periodType, effectivePeriod, expenses, income, periodOptions]);
 
   const trends = useMemo(() => {
     if (!previousPeriodTotals) {

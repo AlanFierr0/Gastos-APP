@@ -28,10 +28,6 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">table_chart</span>
           <span className="text-sm font-medium">{t('spreadsheet')}</span>
         </NavLink>
-        <NavLink className={linkClass} to="/investments">
-          <span className="material-symbols-outlined">trending_up</span>
-          <span className="text-sm font-medium">{t('investments')}</span>
-        </NavLink>
         <NavLink className={linkClass} to="/analysis">
           <span className="material-symbols-outlined">monitoring</span>
           <span className="text-sm font-medium">{t('financialAnalysis') || 'Análisis'}</span>

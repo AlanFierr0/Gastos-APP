@@ -8,8 +8,8 @@ import Dashboard from './pages/Dashboard.jsx';
 import Upload from './pages/Upload.jsx';
 import Spreadsheet from './pages/Spreadsheet.jsx';
 import Grid from './pages/Grid.jsx';
-import Investments from './pages/Investments.jsx';
 import FinancialAnalysis from './pages/FinancialAnalysis.jsx';
+import NotFound from './pages/NotFound.jsx';
 
 const root = createRoot(document.getElementById('root'));
 
@@ -22,11 +22,11 @@ root.render(
             <Route index element={<Navigate to="/spreadsheet" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             {/** expenses/income removidos **/}
-            <Route path="/investments" element={<Investments />} />
             <Route path="/analysis" element={<FinancialAnalysis />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/spreadsheet" element={<Spreadsheet />} />
             <Route path="/grid" element={<Grid />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

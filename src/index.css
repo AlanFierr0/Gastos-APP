@@ -81,6 +81,86 @@ body {
   background-color: transparent !important;
 }
 
+/* Prevent white background on hover for chart area */
+.recharts-cartesian-grid,
+.recharts-cartesian-grid:hover,
+.recharts-cartesian-grid *,
+.recharts-cartesian-grid *:hover,
+.recharts-cartesian-axis,
+.recharts-cartesian-axis:hover,
+.recharts-cartesian-axis *,
+.recharts-cartesian-axis *:hover,
+.recharts-layer,
+.recharts-layer:hover,
+.recharts-layer *,
+.recharts-layer *:hover {
+  background-color: transparent !important;
+}
+
+/* Prevent white background on hover in dark mode */
+.dark .recharts-cartesian-grid,
+.dark .recharts-cartesian-grid:hover,
+.dark .recharts-cartesian-grid *,
+.dark .recharts-cartesian-grid *:hover,
+.dark .recharts-cartesian-axis,
+.dark .recharts-cartesian-axis:hover,
+.dark .recharts-cartesian-axis *,
+.dark .recharts-cartesian-axis *:hover,
+.dark .recharts-layer,
+.dark .recharts-layer:hover,
+.dark .recharts-layer *,
+.dark .recharts-layer *:hover {
+  background-color: transparent !important;
+}
+
+/* Fix tooltip cursor background - this is the rectangle that appears on hover */
+.recharts-tooltip-cursor,
+.recharts-tooltip-cursor *,
+.recharts-tooltip-cursor-fill,
+.recharts-tooltip-cursor-fill * {
+  fill: transparent !important;
+  background-color: transparent !important;
+}
+
+.dark .recharts-tooltip-cursor,
+.dark .recharts-tooltip-cursor *,
+.dark .recharts-tooltip-cursor-fill,
+.dark .recharts-tooltip-cursor-fill * {
+  fill: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Force transparent background on all Recharts elements including hover states */
+.recharts-wrapper,
+.recharts-wrapper:hover,
+.recharts-wrapper *,
+.recharts-wrapper *:hover,
+.recharts-surface,
+.recharts-surface:hover,
+.recharts-surface *,
+.recharts-surface *:hover,
+.recharts-legend-wrapper,
+.recharts-legend-wrapper:hover,
+.recharts-legend-wrapper *,
+.recharts-legend-wrapper *:hover {
+  background-color: transparent !important;
+}
+
+.dark .recharts-wrapper,
+.dark .recharts-wrapper:hover,
+.dark .recharts-wrapper *,
+.dark .recharts-wrapper *:hover,
+.dark .recharts-surface,
+.dark .recharts-surface:hover,
+.dark .recharts-surface *,
+.dark .recharts-surface *:hover,
+.dark .recharts-legend-wrapper,
+.dark .recharts-legend-wrapper:hover,
+.dark .recharts-legend-wrapper *,
+.dark .recharts-legend-wrapper *:hover {
+  background-color: transparent !important;
+}
+
 /* Specific fix for tooltip content wrapper */
 .dark .recharts-default-tooltip {
   background-color: rgb(31 41 55) !important;
