@@ -3,7 +3,7 @@
 import axios from 'axios';
 
 const BASE_URL = import.meta?.env?.VITE_API_URL || 'http://localhost:6543';
-const http = axios.create({ baseURL: BASE_URL, timeout: 12000 });
+const http = axios.create({ baseURL: BASE_URL, timeout: 60000 }); // 60 seconds for large requests
 
 export async function getExpenses(params) {
   try {
@@ -51,8 +51,8 @@ export async function previewExcel(formData) {
   return data;
 }
 
-export async function confirmImport(records, year) {
-  const { data } = await http.post('/upload/confirm', { records, year });
+export async function confirmImport(records) {
+  const { data } = await http.post('/upload/confirm', { records });
   return data;
 }
 

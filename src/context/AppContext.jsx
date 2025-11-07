@@ -112,22 +112,32 @@ export function AppProvider({ children }) {
     setTheme,
     toggleTheme: () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark')),
     async addIncome(newIncome) {
-      const lowerSource = String(newIncome.source || '').trim().toLowerCase();
+      const concept = String(newIncome.concept || '').trim();
+      const lowerCategoryName = String(newIncome.categoryName || '').trim().toLowerCase();
       let categoryId = newIncome.categoryId;
-      if (!categoryId) {
-        const cat = await ensureCategory(lowerSource, 'income');
+      if (!categoryId && lowerCategoryName) {
+        const cat = await ensureCategory(lowerCategoryName, 'income');
         categoryId = cat?.id || undefined;
       }
       const optimistic = {
         id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         ...newIncome,
-        source: lowerSource,
+        concept,
         categoryId,
-        category: categoryId ? categoryById(categoryId) : { id: undefined, name: lowerSource },
+        category: categoryId ? categoryById(categoryId) : (lowerCategoryName ? { id: undefined, name: lowerCategoryName } : undefined),
       };
       setIncome((prev) => [optimistic, ...prev]);
       try {
-        const saved = await api.createIncome({ ...newIncome, source: lowerSource, categoryId });
+        const payload = {
+          concept,
+          amount: newIncome.amount,
+          date: newIncome.date,
+          note: newIncome.note,
+          currency: newIncome.currency,
+          categoryId,
+          isRecurring: newIncome.isRecurring,
+        };
+        const saved = await api.createIncome(payload);
         if (saved && saved.id) {
           setIncome((prev) => [saved, ...prev.filter((i) => i.id !== optimistic.id)]);
         }
@@ -136,16 +146,31 @@ export function AppProvider({ children }) {
       }
     },
     async updateIncome(id, updates) {
-      const lowerSource = String(updates.source || '').trim().toLowerCase();
+      const concept = updates.concept !== undefined ? String(updates.concept || '').trim() : undefined;
+      const lowerCategoryName = String(updates.categoryName || '').trim().toLowerCase();
       let categoryId = updates.categoryId;
-      if (!categoryId && lowerSource) {
-        const cat = await ensureCategory(lowerSource, 'income');
+      if (!categoryId && lowerCategoryName) {
+        const cat = await ensureCategory(lowerCategoryName, 'income');
         categoryId = cat?.id || undefined;
       }
-      const optimistic = { ...updates, id, source: lowerSource, categoryId };
+      const optimistic = {
+        ...updates,
+        ...(concept !== undefined ? { concept } : {}),
+        id,
+        categoryId,
+      };
       setIncome((prev) => prev.map((i) => (i.id === id ? { ...i, ...optimistic, category: categoryId ? categoryById(categoryId) : i.category } : i)));
       try {
-        const saved = await api.updateIncome(id, { ...updates, source: lowerSource, categoryId });
+        const payload = {
+          ...(concept !== undefined ? { concept } : {}),
+          ...(updates.amount !== undefined ? { amount: updates.amount } : {}),
+          ...(updates.date !== undefined ? { date: updates.date } : {}),
+          ...(updates.note !== undefined ? { note: updates.note } : {}),
+          ...(updates.currency !== undefined ? { currency: updates.currency } : {}),
+          ...(categoryId !== undefined ? { categoryId } : {}),
+          ...(updates.isRecurring !== undefined ? { isRecurring: updates.isRecurring } : {}),
+        };
+        const saved = await api.updateIncome(id, payload);
         if (saved && saved.id) {
           setIncome((prev) => prev.map((i) => (i.id === id ? saved : i)));
         }
@@ -157,6 +182,7 @@ export function AppProvider({ children }) {
     },
     async addExpense(newExpense) {
       const lowerCategoryName = String(newExpense.categoryName || '').trim().toLowerCase();
+      const concept = String(newExpense.concept || '').trim();
       let categoryId = newExpense.categoryId;
       if (!categoryId) {
         const cat = await ensureCategory(lowerCategoryName, 'expense');
@@ -165,12 +191,21 @@ export function AppProvider({ children }) {
       const optimistic = {
         id: crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         ...newExpense,
+        concept,
         categoryId,
         category: categoryId ? categoryById(categoryId) : { id: undefined, name: lowerCategoryName },
       };
       setExpenses((prev) => [optimistic, ...prev]);
       try {
-        const saved = await api.createExpense({ ...newExpense, categoryId });
+        const payload = {
+          concept,
+          amount: newExpense.amount,
+          date: newExpense.date,
+          note: newExpense.note,
+          currency: newExpense.currency,
+          categoryId,
+        };
+        const saved = await api.createExpense(payload);
         if (saved && saved.id) {
           setExpenses((prev) => [saved, ...prev.filter((e) => e.id !== optimistic.id)]);
         }
@@ -180,15 +215,29 @@ export function AppProvider({ children }) {
     },
     async updateExpense(id, updates) {
       const lowerCategoryName = String(updates.categoryName || '').trim().toLowerCase();
+      const concept = updates.concept !== undefined ? String(updates.concept || '').trim() : undefined;
       let categoryId = updates.categoryId;
       if (!categoryId && lowerCategoryName) {
         const cat = await ensureCategory(lowerCategoryName, 'expense');
         categoryId = cat?.id || undefined;
       }
-      const optimistic = { ...updates, id, categoryId };
+      const optimistic = {
+        ...updates,
+        ...(concept !== undefined ? { concept } : {}),
+        id,
+        categoryId,
+      };
       setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...optimistic, category: categoryId ? categoryById(categoryId) : e.category } : e)));
       try {
-        const saved = await api.updateExpense(id, { ...updates, categoryId });
+        const payload = {
+          ...(concept !== undefined ? { concept } : {}),
+          ...(updates.amount !== undefined ? { amount: updates.amount } : {}),
+          ...(updates.date !== undefined ? { date: updates.date } : {}),
+          ...(updates.note !== undefined ? { note: updates.note } : {}),
+          ...(updates.currency !== undefined ? { currency: updates.currency } : {}),
+          ...(categoryId !== undefined ? { categoryId } : {}),
+        };
+        const saved = await api.updateExpense(id, payload);
         if (saved && saved.id) {
           setExpenses((prev) => prev.map((e) => (e.id === id ? saved : e)));
         }

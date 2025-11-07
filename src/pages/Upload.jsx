@@ -12,14 +12,7 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const selectedFile = watch('file');
-  
-  // Generate year options from 1998 to 2050
-  const yearOptions = [];
-  for (let i = 1998; i <= 2050; i++) {
-    yearOptions.push(i);
-  }
 
   const getErrorMessage = (error) => {
     if (!error) return t('uploadFailed');
@@ -63,7 +56,6 @@ export default function Upload() {
     try {
       const form = new FormData();
       form.append('file', values.file[0]);
-      form.append('year', String(selectedYear));
       const result = await api.previewExcel(form);
       const records = result.records || [];
       setPreviewData(records);
@@ -79,10 +71,11 @@ export default function Upload() {
         message += `❌ Errores encontrados durante el análisis (${result.errors.length}):\n`;
         result.errors.slice(0, 10).forEach((err, idx) => {
           const errInfo = err.item || err.category || 'Desconocido';
+          const sheetInfo = err.sheet ? ` hoja ${err.sheet}` : '';
           const errMonth = err.month ? ` mes ${err.month}/${err.year || '?'}` : '';
           const errValue = err.value ? ` valor: ${err.value}` : '';
           const errMsg = err.error || err.reason || 'Error desconocido';
-          message += `  ${idx + 1}. ${errInfo}${errMonth}${errValue}: ${errMsg}\n`;
+          message += `  ${idx + 1}. ${errInfo}${sheetInfo}${errMonth}${errValue}: ${errMsg}\n`;
         });
         if (result.errors.length > 10) {
           message += `  ... y ${result.errors.length - 10} errores más.\n`;
@@ -94,10 +87,11 @@ export default function Upload() {
         message += `⚠️ Advertencias encontradas durante el análisis (${result.warnings.length}):\n`;
         result.warnings.slice(0, 10).forEach((warn, idx) => {
           const warnInfo = warn.item || warn.category || 'Desconocido';
+          const sheetInfo = warn.sheet ? ` hoja ${warn.sheet}` : '';
           const warnMonth = warn.month ? ` mes ${warn.month}/${warn.year || '?'}` : '';
           const warnValue = warn.value ? ` valor: ${warn.value}` : '';
           const warnMsg = warn.reason || 'Advertencia';
-          message += `  ${idx + 1}. ${warnInfo}${warnMonth}${warnValue}: ${warnMsg}\n`;
+          message += `  ${idx + 1}. ${warnInfo}${sheetInfo}${warnMonth}${warnValue}: ${warnMsg}\n`;
         });
         if (result.warnings.length > 10) {
           message += `  ... y ${result.warnings.length - 10} advertencias más.\n`;
@@ -149,18 +143,19 @@ export default function Upload() {
     setLoading(true);
     setStatus(t('uploading'));
     try {
-      const result = await api.confirmImport(previewData, selectedYear);
+      const result = await api.confirmImport(previewData);
       let message = result.message || t('importSuccess');
       
       // Build detailed message with errors and warnings
       if (result.errors && result.errors.length > 0) {
         message += `\n\n❌ Errores (${result.errors.length}):\n`;
         result.errors.forEach((err, idx) => {
-          const errInfo = err.item || err.category || err.record?.categoryName || err.record?.source || 'Desconocido';
+          const errInfo = err.item || err.category || err.record?.categoryName || err.record?.concept || 'Desconocido';
+          const sheetInfo = err.sheet ? ` hoja ${err.sheet}` : '';
           const errMonth = err.month ? ` mes ${err.month}/${err.year || '?'}` : '';
           const errValue = err.value ? ` valor: ${err.value}` : '';
           const errMsg = err.error || err.reason || 'Error desconocido';
-          message += `  ${idx + 1}. ${errInfo}${errMonth}${errValue}: ${errMsg}\n`;
+          message += `  ${idx + 1}. ${errInfo}${sheetInfo}${errMonth}${errValue}: ${errMsg}\n`;
         });
       }
       
@@ -168,10 +163,11 @@ export default function Upload() {
         message += `\n⚠️ Advertencias (${result.warnings.length}):\n`;
         result.warnings.forEach((warn, idx) => {
           const warnInfo = warn.item || warn.category || 'Desconocido';
+          const sheetInfo = warn.sheet ? ` hoja ${warn.sheet}` : '';
           const warnMonth = warn.month ? ` mes ${warn.month}/${warn.year || '?'}` : '';
           const warnValue = warn.value ? ` valor: ${warn.value}` : '';
           const warnMsg = warn.reason || 'Advertencia';
-          message += `  ${idx + 1}. ${warnInfo}${warnMonth}${warnValue}: ${warnMsg}\n`;
+          message += `  ${idx + 1}. ${warnInfo}${sheetInfo}${warnMonth}${warnValue}: ${warnMsg}\n`;
         });
       }
       
@@ -213,23 +209,9 @@ export default function Upload() {
               className="block w-full text-sm text-gray-700 dark:text-gray-200 file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-white hover:file:bg-primary/90" 
               {...register('file')} 
             />
-            <div className="flex items-center gap-3">
-              <label htmlFor="year-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {t('year') || 'Año'}:
-              </label>
-              <select
-                id="year-select"
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-              >
-                {yearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {t('uploadSheetYearHint') || 'Detectamos automáticamente el año según el nombre de cada hoja del archivo.'}
+            </p>
             <div className="flex justify-end">
               <button 
                 disabled={loading || !selectedFile?.[0]} 

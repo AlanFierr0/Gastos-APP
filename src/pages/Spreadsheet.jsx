@@ -63,8 +63,8 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
         }
       } else if (field === 'currency') {
         updates.currency = editValue.toUpperCase();
-      } else if (field === 'notes') {
-        updates.notes = editValue || undefined;
+      } else if (field === 'note') {
+        updates.note = editValue || undefined;
       } else if (field === 'category') {
         updates.categoryName = editValue;
       }
@@ -230,21 +230,21 @@ export default function Spreadsheet() {
       id: e.id,
       type: 'expense',
       category: e.category?.name || '',
-      concept: e.name || e.notes || '',
+      concept: e.concept || e.note || '',
       amount: e.amount,
       date: e.date,
-      notes: e.notes || '',
+      note: e.note || '',
       rawDate: typeof e.date === 'string' ? e.date : new Date(e.date).toISOString(),
     }));
 
     const incomeRows = (periodIncome || []).map((i) => ({
       id: i.id,
       type: 'income',
-      category: i.category?.name || i.source || '',
-      concept: i.notes || i.source || '',
+      category: i.category?.name || '',
+      concept: i.concept || i.note || '',
       amount: i.amount,
       date: i.date,
-      notes: i.notes || '',
+      note: i.note || '',
       rawDate: typeof i.date === 'string' ? i.date : new Date(i.date).toISOString(),
     }));
 
@@ -520,10 +520,10 @@ export default function Spreadsheet() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900 max-w-xs">
                       <EditableCell
-                        value={row.notes || ''}
+                        value={row.note || ''}
                         type={row.type}
                         row={row}
-                        field="notes"
+                        field="note"
                         onSave={() => {}}
                         t={t}
                         formatMonthYear={formatMonthYear}

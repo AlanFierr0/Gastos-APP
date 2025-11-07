@@ -138,7 +138,7 @@ export default function Grid() {
   const expensesGridData = useMemo(() => {
     const rowKeySet = new Map();
     
-    // Process expenses - use category name or notes as the key
+    // Process expenses - group by category name (fallback to concept/note)
     (expenses || []).forEach((e) => {
       const ym = extractYearMonth(e.date);
       if (!ym) return;
@@ -146,7 +146,7 @@ export default function Grid() {
       if (selectedYear !== null && ym.year !== selectedYear) return;
       const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
       
-      const rowKey = e.category?.name || e.notes || t('expenseGeneric') || 'Gasto';
+      const rowKey = e.category?.name || e.concept || e.note || t('expenseGeneric') || 'Gasto';
       if (!rowKeySet.has(rowKey)) {
         rowKeySet.set(rowKey, {
           key: rowKey,
@@ -178,7 +178,7 @@ export default function Grid() {
     return grid;
   }, [expenses, t, selectedYear]);
 
-  // Process income data - use notes (concepts) as the key, not source (filtered by selectedYear if set)
+  // Process income data grouped by category (filtered by selectedYear if set)
   const incomeGridData = useMemo(() => {
     const rowKeySet = new Map();
     
@@ -190,8 +190,7 @@ export default function Grid() {
       if (selectedYear !== null && ym.year !== selectedYear) return;
       const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
       
-      // Use notes (concept) as the key, not source
-      const rowKey = i.notes || i.source || t('incomeGeneric') || 'Ingreso';
+      const rowKey = i.category?.name || i.categoryName || t('incomeGeneric') || 'Ingreso';
       if (!rowKeySet.has(rowKey)) {
         rowKeySet.set(rowKey, {
           key: rowKey,
@@ -367,18 +366,19 @@ export default function Grid() {
           await addExpense({
             categoryId,
             categoryName: categoryName,
-            name: row.key,
+            concept: row.key,
             amount: numValue,
             date,
-            notes: '',
+            note: '',
           });
         } else {
-          // For income, use row.key as source and notes
+          // For income, use row key as concept
           await addIncome({
-            source: row.key.toLowerCase(),
+            concept: row.key,
+            categoryName: row.key,
             amount: numValue,
             date,
-            notes: row.key,
+            note: '',
           });
         }
       }
@@ -539,7 +539,7 @@ export default function Grid() {
           <thead className="sticky top-0 bg-blue-50 dark:bg-blue-900/20 z-10">
             <tr>
               <th className="sticky left-0 border-2 border-blue-300 dark:border-blue-700 px-1.5 py-1.5 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 z-20" style={{ width: 100, minWidth: 100 }}>
-                {gridType === 'expense' ? (t('category') || 'Categoría') : (t('concept') || 'Concepto')}
+                {t('category') || 'Categoría'}
               </th>
               {months.map((monthKey, index) => {
                 const [year, month] = monthKey.split('-').map(Number);
@@ -639,12 +639,10 @@ export default function Grid() {
                               </thead>
                               <tbody>
                                 {(() => {
-                                  // Group records by concept: for expenses use record.name; for income use notes/source
+                                  // Group records by concept for both expenses and income
                                   const conceptMap = new Map();
                                   row.records.forEach((record) => {
-                                    const conceptLabel = record.type === 'expense'
-                                      ? (record.name || record.notes || (t('concept') || 'Concepto'))
-                                      : (record.notes || record.source || (t('concept') || 'Concepto'));
+                                  const conceptLabel = record.concept || record.note || (t('concept') || 'Concepto');
                                     if (!conceptMap.has(conceptLabel)) {
                                       conceptMap.set(conceptLabel, {
                                         label: conceptLabel,
