@@ -195,6 +195,7 @@ export default function Spreadsheet() {
   const [sortOrder, setSortOrder] = useState('desc');
   const [filterType, setFilterType] = useState('all'); // 'all', 'expense', 'income'
   const [filterCategory, setFilterCategory] = useState(location.state?.filterCategory || null);
+  const [filterCategories, setFilterCategories] = useState(location.state?.filterCategories || null);
   const [searchTerm, setSearchTerm] = useState('');
   const [periodType, setPeriodType] = useState('all'); // 'all', 'month', 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getCurrentYearMonth());
@@ -215,7 +216,7 @@ export default function Spreadsheet() {
   
   // Clear navigation state after applying filter
   useEffect(() => {
-    if (location.state?.filterCategory) {
+    if (location.state?.filterCategory || location.state?.filterCategories) {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, navigate, location.pathname]);
@@ -264,7 +265,14 @@ export default function Spreadsheet() {
     if (filterType !== 'all') {
       data = data.filter((d) => d.type === filterType);
     }
-    if (filterCategory) {
+    if (filterCategories && Array.isArray(filterCategories) && filterCategories.length > 0) {
+      // Filter by multiple categories (for "Otros")
+      const normalizedCategories = filterCategories.map(c => String(c || '').trim().toLowerCase());
+      data = data.filter((d) => {
+        const categoryName = String(d.category || '').trim().toLowerCase();
+        return normalizedCategories.includes(categoryName);
+      });
+    } else if (filterCategory) {
       data = data.filter((d) => d.category === filterCategory);
     }
     if (searchTerm.trim()) {
@@ -276,7 +284,7 @@ export default function Spreadsheet() {
       });
     }
     return data;
-  }, [allData, filterType, filterCategory, searchTerm]);
+  }, [allData, filterType, filterCategory, filterCategories, searchTerm]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -380,12 +388,24 @@ export default function Spreadsheet() {
               className="w-52 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-transparent focus:border-primary focus:outline-none text-sm"
             />
 
-            {filterCategory && (
+            {(filterCategory || (filterCategories && filterCategories.length > 0)) && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
-                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(filterCategory) }} />
-                <span>{capitalizeWords(filterCategory)}</span>
+                {filterCategories && filterCategories.length > 0 ? (
+                  <>
+                    <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
+                    <span>{t('others') || 'Otros'} ({filterCategories.length})</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(filterCategory) }} />
+                    <span>{capitalizeWords(filterCategory)}</span>
+                  </>
+                )}
                 <button
-                  onClick={() => setFilterCategory(null)}
+                  onClick={() => {
+                    setFilterCategory(null);
+                    setFilterCategories(null);
+                  }}
                   className="ml-1 hover:opacity-70 transition-opacity"
                   title={t('clearFilter')}
                 >
@@ -394,10 +414,11 @@ export default function Spreadsheet() {
               </div>
             )}
 
-            {(filterCategory || searchTerm) && (
+            {(filterCategory || (filterCategories && filterCategories.length > 0) || searchTerm) && (
               <button
                 onClick={() => {
                   setFilterCategory(null);
+                  setFilterCategories(null);
                   setSearchTerm('');
                 }}
                 className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"

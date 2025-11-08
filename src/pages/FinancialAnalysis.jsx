@@ -364,7 +364,7 @@ export default function FinancialAnalysis() {
               {t('fixedExpense') || 'Gasto fijo'}
             </h3>
             {!collapsed.fixed ? (
-              <div className="max-h-48 overflow-auto rounded border border-gray-200 dark:border-gray-700">
+              <div className="rounded border border-gray-200 dark:border-gray-700">
                 {catList('fixed')}
               </div>
             ) : (
@@ -406,7 +406,7 @@ export default function FinancialAnalysis() {
               {t('wellbeing') || 'Bienestar'}
             </h3>
             {!collapsed.wellbeing ? (
-              <div className="max-h-48 overflow-auto rounded border border-gray-200 dark:border-gray-700">
+              <div className="rounded border border-gray-200 dark:border-gray-700">
                 {catList('wellbeing')}
               </div>
             ) : (
@@ -448,7 +448,7 @@ export default function FinancialAnalysis() {
               {t('saving') || 'Ahorro'}
             </h3>
             {!collapsed.saving ? (
-              <div className="max-h-48 overflow-auto rounded border border-gray-200 dark:border-gray-700">
+              <div className="rounded border border-gray-200 dark:border-gray-700">
                 {catList('saving')}
               </div>
             ) : (

@@ -144,7 +144,7 @@ export default function Dashboard() {
     };
   }, [monthTotals, previousPeriodTotals, periodType, t]);
 
-  const pieData = useMemo(() => {
+  const { pieData, othersCategories } = useMemo(() => {
     // Sumar exactamente como en la Grilla: montos crudos por categoría
     const map = new Map();
     for (const e of (periodExpenses || [])) {
@@ -159,28 +159,33 @@ export default function Dashboard() {
 
     // Convertir a array y mantener solo categorías con total positivo
     let allData = Array.from(map.entries())
-      .map(([name, value]) => ({ name: capitalizeWords(name), value: Number(value) }))
+      .map(([name, value]) => ({ name: capitalizeWords(name), value: Number(value), originalName: name }))
       .filter(item => item.value > 0);
 
-    if (allData.length === 0) return [];
+    if (allData.length === 0) return { pieData: [], othersCategories: [] };
 
     // Total para umbral de "Otros"
     const total = allData.reduce((sum, item) => sum + item.value, 0);
-    if (total === 0) return [];
+    if (total === 0) return { pieData: [], othersCategories: [] };
 
     const threshold = total * 0.02; // 2%
     const mainCategories = [];
     let othersSum = 0;
+    const othersCats = [];
 
     for (const item of allData) {
-      if (item.value >= threshold) mainCategories.push(item);
-      else othersSum += item.value;
+      if (item.value >= threshold) {
+        mainCategories.push({ name: item.name, value: item.value });
+      } else {
+        othersSum += item.value;
+        othersCats.push(item.originalName);
+      }
     }
 
     mainCategories.sort((a, b) => b.value - a.value);
     if (othersSum > 0) mainCategories.push({ name: t('others') || 'Otros', value: othersSum });
 
-    return mainCategories;
+    return { pieData: mainCategories, othersCategories: othersCats };
   }, [periodExpenses, t]);
 
   // Only current selected period
@@ -370,7 +375,12 @@ export default function Dashboard() {
             <PieBreakdown 
               data={pieData} 
               onCategoryClick={(categoryName) => {
-                navigate('/spreadsheet', { state: { filterCategory: categoryName } });
+                // If clicking on "Otros", pass all the categories that form it
+                if (categoryName === (t('others') || 'Otros')) {
+                  navigate('/spreadsheet', { state: { filterCategories: othersCategories } });
+                } else {
+                  navigate('/spreadsheet', { state: { filterCategory: categoryName } });
+                }
               }}
             />
           ) : (

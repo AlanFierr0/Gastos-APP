@@ -354,17 +354,21 @@ export default function Grid() {
     }
   };
 
-  const handleDetailDoubleClick = (record, monthKey, gridType) => {
-    const recordMonthKey = `${extractYearMonth(record.date)?.year}-${String(extractYearMonth(record.date)?.month).padStart(2, '0')}`;
-    if (recordMonthKey !== monthKey) return; // Only edit if the record matches this month
-    
-    setEditingDetail({ recordId: record.id, monthKey, gridType, value: String(record.amount || 0) });
+  const handleDetailDoubleClick = (record, monthKey, gridType, conceptLabel, categoryName) => {
+    if (record) {
+      const recordMonthKey = `${extractYearMonth(record.date)?.year}-${String(extractYearMonth(record.date)?.month).padStart(2, '0')}`;
+      if (recordMonthKey !== monthKey) return; // Only edit if the record matches this month
+      setEditingDetail({ recordId: record.id, monthKey, gridType, value: String(record.amount || 0), conceptLabel, categoryName });
+    } else {
+      // Empty cell - allow editing to create new record
+      setEditingDetail({ recordId: null, monthKey, gridType, value: '', conceptLabel, categoryName });
+    }
   };
 
   const handleDetailSave = async () => {
     if (!editingDetail) return;
     
-    const { recordId, gridType, value } = editingDetail;
+    const { recordId, gridType, value, monthKey, conceptLabel, categoryName } = editingDetail;
     
     try {
       const numValue = parseFloat(String(value).replace(/[^\d.-]/g, ''));
@@ -373,11 +377,48 @@ export default function Grid() {
         return;
       }
 
-      const updates = { amount: numValue };
-      if (gridType === 'expense') {
-        await updateExpense(recordId, updates);
+      if (recordId) {
+        // Update existing record
+        const updates = { amount: numValue };
+        if (gridType === 'expense') {
+          await updateExpense(recordId, updates);
+        } else {
+          await updateIncome(recordId, updates);
+        }
       } else {
-        await updateIncome(recordId, updates);
+        // Create new record - only if value is valid and > 0
+        if (numValue <= 0) {
+          setEditingDetail(null);
+          return;
+        }
+        
+        const [year, month] = monthKey.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0));
+        const dateString = date.toISOString();
+        
+        // Find category by name
+        const category = categories?.find(c => String(c.name || '').trim().toLowerCase() === String(categoryName || '').trim().toLowerCase());
+        const categoryId = category?.id;
+        
+        if (!categoryId) {
+          setEditingDetail(null);
+          return;
+        }
+
+        const newRecord = {
+          concept: conceptLabel || (t('concept') || 'Concepto'),
+          amount: numValue,
+          date: dateString,
+          categoryId,
+          categoryName: categoryName,
+          currency: 'ARS',
+        };
+
+        if (gridType === 'expense') {
+          await addExpense(newRecord);
+        } else {
+          await addIncome(newRecord);
+        }
       }
     } catch (error) {
       // Error saving silently ignored
@@ -641,11 +682,12 @@ export default function Grid() {
                                           const isForecast = isForecastMonth(monthKey);
                                           const isLastPastMonth = index === lastPastMonthIndex;
                                           
-                                          // Check if any record in this cell is being edited
+                                          // Check if this cell is being edited (either has a record being edited, or is an empty cell being edited)
                                           const editingRecord = monthRecords.find(r => editingDetail?.recordId === r.id && editingDetail?.monthKey === monthKey);
-                                          const isEditing = !!editingRecord;
+                                          const isEditingEmpty = editingDetail?.recordId === null && editingDetail?.monthKey === monthKey && editingDetail?.conceptLabel === concept.label;
+                                          const isEditing = !!editingRecord || isEditingEmpty;
                                           
-                                          if (isEditing && editingRecord) {
+                                          if (isEditing && (editingRecord || isEditingEmpty)) {
                                             return (
                                               <td
                                                 key={monthKey}
@@ -684,10 +726,10 @@ export default function Grid() {
                                           return (
                                             <td
                                               key={monthKey}
-                                              className={`border-r-2 border-indigo-200 dark:border-indigo-700 px-1 py-1 text-sm text-center ${firstRecord ? 'hover:bg-indigo-100 dark:hover:bg-indigo-900/30 cursor-cell' : ''} ${isForecast ? 'opacity-60 italic' : ''} ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                                              className={`border-r-2 border-indigo-200 dark:border-indigo-700 px-1 py-1 text-sm text-center hover:bg-indigo-100 dark:hover:bg-indigo-900/30 cursor-cell ${isForecast ? 'opacity-60 italic' : ''} ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
                                               style={{ width: 85, minWidth: 85 }}
-                                              onDoubleClick={() => firstRecord && handleDetailDoubleClick(firstRecord, monthKey, gridType)}
-                                              title={firstRecord ? (isForecast ? (t('forecast') || 'Pronóstico') : (t('doubleClickToEdit') || 'Doble click para editar')) : ''}
+                                              onDoubleClick={() => handleDetailDoubleClick(firstRecord || null, monthKey, gridType, concept.label, row.key)}
+                                              title={isForecast ? (t('forecast') || 'Pronóstico') : (t('doubleClickToEdit') || 'Doble click para editar')}
                                             >
                                               {monthAmount !== 0 ? formatMoneyNoDecimals(Math.round(monthAmount), 'ARS', { sign: 'auto' }) : '-'}
                                             </td>
