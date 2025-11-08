@@ -3,15 +3,27 @@ import { useApp } from '../context/AppContext.jsx';
 import Card from '../components/Card.jsx';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import * as api from '../api/index.js';
-import { capitalizeWords } from '../utils/format.js';
+import { capitalizeWords, formatNumber } from '../utils/format.js';
 
 function useFAConfig(categories) {
+  // Store categories in ref to access in toggle
+  const categoriesRef = React.useRef(categories);
+  React.useEffect(() => {
+    categoriesRef.current = categories;
+  }, [categories]);
+
   const [config, setConfig] = React.useState({
     fixed: [],
     wellbeing: [],
     saving: [],
     targets: { fixed: 50, wellbeing: 30, saving: 20 },
   });
+  // Store config in ref to access latest state
+  const configRef = React.useRef(config);
+  React.useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+  
   const [loading, setLoading] = React.useState(true);
 
   // Load config from API on mount
@@ -19,7 +31,21 @@ function useFAConfig(categories) {
     (async () => {
       try {
         const data = await api.getFAConfig();
-        setConfig(data);
+        // Normalize category names when loading from API
+        const normalizeArray = (arr) => {
+          if (!Array.isArray(arr)) return [];
+          return arr.map(item => String(item || '').trim().toLowerCase()).filter(Boolean);
+        };
+        setConfig({
+          fixed: normalizeArray(data.fixed || []),
+          wellbeing: normalizeArray(data.wellbeing || []),
+          saving: normalizeArray(data.saving || []),
+          targets: {
+            fixed: data.targets?.fixed ?? 50,
+            wellbeing: data.targets?.wellbeing ?? 30,
+            saving: data.targets?.saving ?? 20,
+          },
+        });
       } catch (err) {
         console.error('Error loading FA config:', err);
       } finally {
@@ -29,29 +55,84 @@ function useFAConfig(categories) {
   }, []);
 
   const save = React.useCallback(async (next) => {
-    setConfig(next);
+    // Normalize before saving
+    const normalizeArray = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      return arr.map(item => String(item || '').trim().toLowerCase()).filter(Boolean);
+    };
+    const normalized = {
+      fixed: normalizeArray(next.fixed || []),
+      wellbeing: normalizeArray(next.wellbeing || []),
+      saving: normalizeArray(next.saving || []),
+      targets: next.targets || { fixed: 50, wellbeing: 30, saving: 20 },
+    };
+    setConfig(normalized);
     try {
       // Transform to API format
-      await api.updateFAConfig({
-        fixed: next.fixed || [],
-        wellbeing: next.wellbeing || [],
-        saving: next.saving || [],
-        targetFixed: next.targets?.fixed ?? 50,
-        targetWellbeing: next.targets?.wellbeing ?? 30,
-        targetSaving: next.targets?.saving ?? 20,
+      const response = await api.updateFAConfig({
+        fixed: normalized.fixed || [],
+        wellbeing: normalized.wellbeing || [],
+        saving: normalized.saving || [],
+        targetFixed: normalized.targets?.fixed ?? 50,
+        targetWellbeing: normalized.targets?.wellbeing ?? 30,
+        targetSaving: normalized.targets?.saving ?? 20,
       });
+      // Normalize response if API returns data
+      if (response) {
+        setConfig({
+          fixed: normalizeArray(response.fixed || []),
+          wellbeing: normalizeArray(response.wellbeing || []),
+          saving: normalizeArray(response.saving || []),
+          targets: {
+            fixed: response.targets?.fixed ?? 50,
+            wellbeing: response.targets?.wellbeing ?? 30,
+            saving: response.targets?.saving ?? 20,
+          },
+        });
+      }
     } catch (err) {
       console.error('Error saving FA config:', err);
     }
   }, []);
 
   const toggle = (bucket, categoryName) => {
-    const lower = String(categoryName || '').toLowerCase();
+    const lower = String(categoryName || '').trim().toLowerCase();
     const current = new Set(config[bucket] || []);
     if (current.has(lower)) current.delete(lower); else current.add(lower);
     const next = { ...config, [bucket]: Array.from(current) };
     save(next);
   };
+
+  const autoCompleteThirdBucket = React.useCallback(() => {
+    // Use ref to get latest config state
+    const currentConfig = configRef.current;
+    const allBuckets = ['fixed', 'wellbeing', 'saving'];
+    const bucketsWithCategories = allBuckets.filter(b => (currentConfig[b] || []).length > 0);
+    
+    if (bucketsWithCategories.length === 2) {
+      // Find the empty bucket
+      const emptyBucket = allBuckets.find(b => (currentConfig[b] || []).length === 0);
+      if (emptyBucket) {
+        // Get all available categories (excluding "general")
+        const allCategoryNames = (categoriesRef.current || [])
+          .map(c => String(c.name || '').trim().toLowerCase())
+          .filter(n => n !== 'general');
+        
+        // Get categories already in the 2 filled buckets
+        const selectedInFilledBuckets = new Set();
+        bucketsWithCategories.forEach(b => {
+          (currentConfig[b] || []).forEach(cat => selectedInFilledBuckets.add(cat));
+        });
+        
+        // Add remaining categories to the empty bucket
+        const remainingCategories = allCategoryNames.filter(cat => !selectedInFilledBuckets.has(cat));
+        const next = { ...currentConfig, [emptyBucket]: remainingCategories };
+        
+        // Save to API (save will update the state)
+        save(next);
+      }
+    }
+  }, [save]);
 
   const setTarget = (bucket, value) => {
     const num = Number(value || 0);
@@ -63,17 +144,19 @@ function useFAConfig(categories) {
   const formatTargetValue = (value) => {
     const num = Number(value || 0);
     // Show as integer if it's a whole number, otherwise 2 decimals
-    return num % 1 === 0 ? num.toString() : num.toFixed(2);
+    return num % 1 === 0 ? num.toString() : formatNumber(num, 2);
   };
 
   const allCategoryNames = React.useMemo(() => {
-    return (categories || []).map(c => String(c.name || '').toLowerCase());
+    return (categories || [])
+      .map(c => String(c.name || '').trim().toLowerCase())
+      .filter(n => n !== 'general'); // Exclude "general" category
   }, [categories]);
 
   // Ensure config only keeps categories that exist (guard against renames)
   React.useEffect(() => {
     if (loading) return; // Don't save while loading
-    const cleanse = (list) => Array.from(new Set(list)).filter(n => allCategoryNames.includes(n));
+    const cleanse = (list) => Array.from(new Set(list.map(n => String(n || '').trim().toLowerCase()))).filter(n => allCategoryNames.includes(n));
     const next = { 
       fixed: cleanse(config.fixed), 
       wellbeing: cleanse(config.wellbeing), 
@@ -101,7 +184,7 @@ function useFAConfig(categories) {
     // eslint-disable-next-line
   }, [allCategoryNames.join('|'), loading]);
 
-  return { config, toggle, setTarget, formatTargetValue, loading };
+  return { config, toggle, setTarget, formatTargetValue, loading, autoCompleteThirdBucket };
 }
 
 function isForecastMonth(year, month) {
@@ -122,6 +205,15 @@ function buildYearlyPercents(expenses, config) {
   const yearTotals = new Map();
   const yearBucket = new Map(); // year -> {fixed, wellbeing, saving}
 
+  // Debug: log config
+  if (expenses && expenses.length > 0 && (config.fixed?.length > 0 || config.wellbeing?.length > 0 || config.saving?.length > 0)) {
+    console.log('FA Config:', {
+      fixed: config.fixed,
+      wellbeing: config.wellbeing,
+      saving: config.saving,
+    });
+  }
+
   for (const e of (expenses || [])) {
     const d = new Date(e.date);
     if (Number.isNaN(d.getTime())) continue;
@@ -133,13 +225,25 @@ function buildYearlyPercents(expenses, config) {
     
     const amount = Number(e.amount || 0);
     const cat = (typeof e.category === 'object' && e.category) ? (e.category.name || '') : (e.category || '');
-    const lowerCat = String(cat).toLowerCase();
+    const lowerCat = String(cat).trim().toLowerCase();
 
     yearTotals.set(year, (yearTotals.get(year) || 0) + amount);
     const buckets = yearBucket.get(year) || { fixed: 0, wellbeing: 0, saving: 0 };
-    if (config.fixed.includes(lowerCat)) buckets.fixed += amount;
-    if (config.wellbeing.includes(lowerCat)) buckets.wellbeing += amount;
-    if (config.saving.includes(lowerCat)) buckets.saving += amount;
+    
+    // Debug first few expenses
+    if (yearTotals.get(year) === amount) {
+      console.log('Processing expense:', {
+        category: cat,
+        lowerCat,
+        inFixed: config.fixed?.includes(lowerCat),
+        inWellbeing: config.wellbeing?.includes(lowerCat),
+        inSaving: config.saving?.includes(lowerCat),
+      });
+    }
+    
+    if (config.fixed && Array.isArray(config.fixed) && config.fixed.includes(lowerCat)) buckets.fixed += amount;
+    if (config.wellbeing && Array.isArray(config.wellbeing) && config.wellbeing.includes(lowerCat)) buckets.wellbeing += amount;
+    if (config.saving && Array.isArray(config.saving) && config.saving.includes(lowerCat)) buckets.saving += amount;
     yearBucket.set(year, buckets);
   }
 
@@ -151,16 +255,16 @@ function buildYearlyPercents(expenses, config) {
     const safePct = (num) => (total !== 0 ? (num / total) * 100 : 0);
     return {
       year: String(y),
-      fixed: Number(safePct(b.fixed).toFixed(2)),
-      wellbeing: Number(safePct(b.wellbeing).toFixed(2)),
-      saving: Number(safePct(b.saving).toFixed(2)),
+      fixed: Number(safePct(b.fixed).toFixed(2).replace(',', '.')),
+      wellbeing: Number(safePct(b.wellbeing).toFixed(2).replace(',', '.')),
+      saving: Number(safePct(b.saving).toFixed(2).replace(',', '.')),
     };
   });
 }
 
 export default function FinancialAnalysis() {
   const { expenses, categories, t } = useApp();
-  const { config, toggle, setTarget, formatTargetValue, loading } = useFAConfig(categories);
+  const { config, toggle, setTarget, formatTargetValue, loading, autoCompleteThirdBucket } = useFAConfig(categories);
   const [editingTarget, setEditingTarget] = React.useState({ bucket: null, value: '' });
   const [collapsed, setCollapsed] = React.useState({ fixed: false, wellbeing: false, saving: false });
   const hasInitializedCollapsed = React.useRef(false);
@@ -188,9 +292,9 @@ export default function FinancialAnalysis() {
   const currentYear = new Date().getFullYear();
   const current = series.find(s => Number(s.year) === currentYear) || { fixed: 0, wellbeing: 0, saving: 0 };
   const deviation = {
-    fixed: Number((current.fixed - (config.targets.fixed || 0)).toFixed(2)),
-    wellbeing: Number((current.wellbeing - (config.targets.wellbeing || 0)).toFixed(2)),
-    saving: Number((current.saving - (config.targets.saving || 0)).toFixed(2)),
+    fixed: Number((current.fixed - (config.targets.fixed || 0)).toFixed(2).replace(',', '.')),
+    wellbeing: Number((current.wellbeing - (config.targets.wellbeing || 0)).toFixed(2).replace(',', '.')),
+    saving: Number((current.saving - (config.targets.saving || 0)).toFixed(2).replace(',', '.')),
   };
 
   const catList = (bucket) => {
@@ -202,16 +306,19 @@ export default function FinancialAnalysis() {
     });
 
     // Filter categories: show only if not selected in other buckets, or already selected in current bucket
+    // Also filter out "General" category
     return (categories || [])
       .filter((c) => {
-        const lower = String(c.name || '').toLowerCase();
+        const lower = String(c.name || '').trim().toLowerCase();
+        // Filter out "general" category
+        if (lower === 'general') return false;
         const isInCurrent = (config[bucket] || []).includes(lower);
         const isInOthers = selectedInOthers.has(lower);
         // Show if it's in current bucket OR not in any other bucket
         return isInCurrent || !isInOthers;
       })
       .map((c) => {
-        const lower = String(c.name || '').toLowerCase();
+        const lower = String(c.name || '').trim().toLowerCase();
         const checked = (config[bucket] || []).includes(lower);
         const displayName = capitalizeWords(c.name);
         return (
@@ -283,7 +390,10 @@ export default function FinancialAnalysis() {
                     onFocus={(e) => setEditingTarget({ bucket: 'fixed', value: e.target.value })}
                     min={0} max={100} />
                   <span className="text-sm text-[#616f89]">%</span>
-                  <button type="button" className="h-8 px-3 rounded bg-primary text-white text-xs" onClick={() => setCollapsed((s) => ({ ...s, fixed: true }))}>{t('confirm') || 'Confirmar'}</button>
+                  <button type="button" className="h-8 px-3 rounded bg-primary text-white text-xs" onClick={() => {
+                    autoCompleteThirdBucket();
+                    setCollapsed((s) => ({ ...s, fixed: true }));
+                  }}>{t('confirm') || 'Confirmar'}</button>
                 </>
               )}
             </div>
@@ -322,7 +432,10 @@ export default function FinancialAnalysis() {
                     onFocus={(e) => setEditingTarget({ bucket: 'wellbeing', value: e.target.value })}
                     min={0} max={100} />
                   <span className="text-sm text-[#616f89]">%</span>
-                  <button type="button" className="h-8 px-3 rounded bg-primary text-white text-xs" onClick={() => setCollapsed((s) => ({ ...s, wellbeing: true }))}>{t('confirm') || 'Confirmar'}</button>
+                  <button type="button" className="h-8 px-3 rounded bg-primary text-white text-xs" onClick={() => {
+                    autoCompleteThirdBucket();
+                    setCollapsed((s) => ({ ...s, wellbeing: true }));
+                  }}>{t('confirm') || 'Confirmar'}</button>
                 </>
               )}
             </div>
@@ -361,7 +474,10 @@ export default function FinancialAnalysis() {
                     onFocus={(e) => setEditingTarget({ bucket: 'saving', value: e.target.value })}
                     min={0} max={100} />
                   <span className="text-sm text-[#616f89]">%</span>
-                  <button type="button" className="h-8 px-3 rounded bg-primary text-white text-xs" onClick={() => setCollapsed((s) => ({ ...s, saving: true }))}>{t('confirm') || 'Confirmar'}</button>
+                  <button type="button" className="h-8 px-3 rounded bg-primary text-white text-xs" onClick={() => {
+                    autoCompleteThirdBucket();
+                    setCollapsed((s) => ({ ...s, saving: true }));
+                  }}>{t('confirm') || 'Confirmar'}</button>
                 </>
               )}
             </div>
@@ -375,7 +491,7 @@ export default function FinancialAnalysis() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="year" />
             <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-            <Tooltip formatter={(v) => `${Number(v).toFixed(2)}%`} />
+            <Tooltip formatter={(v) => `${formatNumber(Number(v), 2)}%`} />
             <Legend />
             <Line type="monotone" dataKey="fixed" name={t('fixedExpense') || 'Gasto fijo'} stroke="#60a5fa" strokeWidth={2} />
             <Line type="monotone" dataKey="wellbeing" name={t('wellbeing') || 'Bienestar'} stroke="#34d399" strokeWidth={2} />
@@ -384,16 +500,16 @@ export default function FinancialAnalysis() {
         </ResponsiveContainer>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
           <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
-            <div className="font-semibold">{t('fixedExpense') || 'Gasto fijo'}: <span className="text-blue-600 dark:text-blue-400">{current.fixed.toFixed(2)}%</span></div>
-            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.fixed > 0 ? '+' : ''}{deviation.fixed}%</div>
+            <div className="font-semibold">{t('fixedExpense') || 'Gasto fijo'}: <span className="text-blue-600 dark:text-blue-400">{formatNumber(current.fixed, 2)}%</span></div>
+            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.fixed > 0 ? '+' : ''}{formatNumber(deviation.fixed, 2)}%</div>
           </div>
           <div className="rounded-lg p-3 bg-green-50 dark:bg-green-900/20">
-            <div className="font-semibold">{t('wellbeing') || 'Bienestar'}: <span className="text-green-600 dark:text-green-400">{current.wellbeing.toFixed(2)}%</span></div>
-            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.wellbeing > 0 ? '+' : ''}{deviation.wellbeing}%</div>
+            <div className="font-semibold">{t('wellbeing') || 'Bienestar'}: <span className="text-green-600 dark:text-green-400">{formatNumber(current.wellbeing, 2)}%</span></div>
+            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.wellbeing > 0 ? '+' : ''}{formatNumber(deviation.wellbeing, 2)}%</div>
           </div>
           <div className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20">
-            <div className="font-semibold">{t('saving') || 'Ahorro'}: <span className="text-amber-600 dark:text-amber-400">{current.saving.toFixed(2)}%</span></div>
-            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.saving > 0 ? '+' : ''}{deviation.saving}%</div>
+            <div className="font-semibold">{t('saving') || 'Ahorro'}: <span className="text-amber-600 dark:text-amber-400">{formatNumber(current.saving, 2)}%</span></div>
+            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.saving > 0 ? '+' : ''}{formatNumber(deviation.saving, 2)}%</div>
           </div>
         </div>
       </Card>

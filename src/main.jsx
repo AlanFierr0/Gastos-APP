@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Upload from './pages/Upload.jsx';
 import Spreadsheet from './pages/Spreadsheet.jsx';
 import Grid from './pages/Grid.jsx';
+import Forecast from './pages/Forecast.jsx';
 import FinancialAnalysis from './pages/FinancialAnalysis.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -26,6 +27,7 @@ root.render(
             <Route path="/upload" element={<Upload />} />
             <Route path="/spreadsheet" element={<Spreadsheet />} />
             <Route path="/grid" element={<Grid />} />
+            <Route path="/forecast" element={<Forecast />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

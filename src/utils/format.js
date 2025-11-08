@@ -32,6 +32,13 @@ export function formatMoneyNoDecimals(amount, currency = 'ARS', { sign = 'auto' 
   return (num < 0 ? '-' : '') + formatted;
 }
 
+export function formatNumber(value, decimals = 2) {
+  const num = Number(value || 0);
+  const fixed = num.toFixed(decimals);
+  // Replace dot with comma for decimal separator
+  return fixed.replace('.', ',');
+}
+
 export function capitalizeWords(value) {
   return String(value || '')
     .split(/\s+/)

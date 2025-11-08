@@ -13,13 +13,14 @@ import {
   BarChart,
   Bar,
 } from 'recharts';
+import { formatNumber } from '../utils/format.js';
 
 // Format Y-axis values with K (thousands) or M (millions)
 const formatYAxisValue = (value) => {
   if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(1)}M`;
+    return `${formatNumber(value / 1000000, 1)}M`;
   } else if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}K`;
+    return `${formatNumber(value / 1000, 1)}K`;
   }
   return value.toString();
 };
@@ -160,7 +161,7 @@ export function PieBreakdown({ data, colors, onCategoryClick }) {
       
       // Calculate total to show percentage
       const total = sortedData.reduce((sum, item) => sum + Number(item.value || 0), 0);
-      const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+      const percentage = total > 0 ? formatNumber((value / total) * 100, 1) : '0,0';
       
       return (
         <div 

@@ -55,10 +55,11 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
         }
         updates.amount = numValue;
       } else if (field === 'date') {
-        // Parse date and normalize to first day of month
+        // Parse date and normalize to first day of month (only month and year)
         const date = new Date(editValue);
         if (!isNaN(date.getTime())) {
-          const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), 1, 12, 0, 0, 0));
+          // Normalize to day 1, month, year, and set time to 12:00:00 UTC
+          const normalizedDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 12, 0, 0, 0));
           updates.date = normalizedDate.toISOString();
         }
       } else if (field === 'currency') {

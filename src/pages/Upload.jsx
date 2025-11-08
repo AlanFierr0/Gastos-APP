@@ -12,6 +12,7 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const selectedFile = watch('file');
 
   const getErrorMessage = (error) => {
@@ -126,6 +127,12 @@ export default function Upload() {
   const handleSaveEdit = (index, updatedRecord) => {
     if (!previewData) return;
     const updated = [...previewData];
+    // Ensure the date has the selected year
+    if (updatedRecord.date) {
+      const date = new Date(updatedRecord.date);
+      date.setFullYear(selectedYear);
+      updatedRecord = { ...updatedRecord, date: date.toISOString() };
+    }
     updated[index] = updatedRecord;
     setPreviewData(updated);
     setEditingIndex(null);
@@ -143,7 +150,17 @@ export default function Upload() {
     setLoading(true);
     setStatus(t('uploading'));
     try {
-      const result = await api.confirmImport(previewData);
+      // Update all records with the selected year
+      const updatedRecords = previewData.map(record => {
+        if (record.date) {
+          const date = new Date(record.date);
+          date.setFullYear(selectedYear);
+          return { ...record, date: date.toISOString() };
+        }
+        return record;
+      });
+      
+      const result = await api.confirmImport(updatedRecords);
       let message = result.message || t('importSuccess');
       
       // Build detailed message with errors and warnings
@@ -229,8 +246,34 @@ export default function Upload() {
               <p className="text-2xl font-bold">{t('previewTitle')}</p>
               <p className="text-sm text-[#616f89] dark:text-gray-400">{t('previewSubtitle')}</p>
             </div>
-            <div className="mb-4 text-sm">
-              <strong>{t('previewRecords')}:</strong> {previewData.length}
+            <div className="mb-4 flex items-center gap-4">
+              <div className="text-sm">
+                <strong>{t('previewRecords')}:</strong> {previewData.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="year-select" className="text-sm font-semibold">
+                  {t('year') || 'Año'}:
+                </label>
+                <select
+                  id="year-select"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="px-2 pr-6 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                  style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'8\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%23666\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.4rem center', paddingRight: '1.5rem', backgroundSize: '8px 8px' }}
+                >
+                  {Array.from({ length: 2100 - 1980 + 1 }, (_, i) => {
+                    const year = 1980 + i;
+                    return (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {t('uploadYearHint') || 'Todas las fechas se ajustarán a este año'}
+                </p>
+              </div>
             </div>
           </Card>
 
@@ -250,19 +293,30 @@ export default function Upload() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewData.map((record, index) => (
-                      <RecordRow
-                        key={index}
-                        record={record}
-                        index={index}
-                        isEditing={editingIndex === index}
-                        onEdit={handleEditRecord}
-                        onSave={handleSaveEdit}
-                        onCancel={handleCancelEdit}
-                        onRemove={handleRemoveRecord}
-                        t={t}
-                      />
-                    ))}
+                    {previewData.map((record, index) => {
+                      // Show record with updated year in preview
+                      const previewRecord = record.date ? {
+                        ...record,
+                        date: (() => {
+                          const date = new Date(record.date);
+                          date.setFullYear(selectedYear);
+                          return date.toISOString();
+                        })()
+                      } : record;
+                      return (
+                        <RecordRow
+                          key={index}
+                          record={previewRecord}
+                          index={index}
+                          isEditing={editingIndex === index}
+                          onEdit={handleEditRecord}
+                          onSave={handleSaveEdit}
+                          onCancel={handleCancelEdit}
+                          onRemove={handleRemoveRecord}
+                          t={t}
+                        />
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

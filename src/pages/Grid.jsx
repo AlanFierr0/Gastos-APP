@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { formatMoneyNoDecimals, capitalizeWords } from '../utils/format.js';
 
@@ -46,6 +47,7 @@ function formatMonthYearLabel(year, month) {
 
 export default function Grid() {
   const { expenses, income, updateExpense, updateIncome, addExpense, addIncome, categories, t } = useApp();
+  const navigate = useNavigate();
   const [selectedCell, setSelectedCell] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
@@ -273,21 +275,12 @@ export default function Grid() {
   };
 
   const handleCellDoubleClick = (rowIndex, monthKey, gridType, isTotal = false) => {
-    // Don't allow editing totals
-    if (isTotal) return;
-    
-    const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
-    const row = gridData[rowIndex];
-    if (!row) return;
-    
-    const records = row.monthData[monthKey] || [];
-    // Sum all amounts for this cell
-    const totalAmount = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-    const initialValue = String(totalAmount || '');
-
-    setEditingCell({ rowIndex, monthKey, gridType });
-    setEditValue(initialValue);
-    setSelectedCell({ rowIndex, monthKey, gridType });
+    // Don't allow editing totals or category totals
+    // Category totals are read-only, users can only edit individual records in the expanded details view
+    // This function intentionally does nothing - editing is handled elsewhere
+    if (isTotal) {
+      // No action needed for totals
+    }
   };
 
   const handleSave = async () => {
@@ -494,7 +487,7 @@ export default function Grid() {
         onClick={() => handleCellClick(rowIndex, monthKey, gridType)}
         onDoubleClick={() => handleCellDoubleClick(rowIndex, monthKey, gridType)}
         style={{ minHeight: '20px', cursor: 'default' }}
-        title={isForecast ? (t('forecast') || 'Pronóstico') : (t('expandToEditDetails') || 'Doble click para editar o agregar datos')}
+        title={isForecast ? (t('forecast') || 'Pronóstico') : (t('expandToEditDetails') || 'Expandir para editar detalles individuales')}
       >
         {displayValue}
       </div>
@@ -565,11 +558,11 @@ export default function Grid() {
                         setExpandedCategory(expandedCategory === expandedKey ? null : expandedKey);
                       }}
                     >
-                      <div className="relative flex items-center justify-center">
-                        <span className="material-symbols-outlined text-xs absolute left-0" style={{ transform: expandedCategory === `${gridType}-${row.key}` ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                      <div className="relative flex items-center justify-center overflow-hidden" style={{ paddingLeft: '1rem' }}>
+                        <span className="material-symbols-outlined text-xs absolute left-0 flex-shrink-0" style={{ transform: expandedCategory === `${gridType}-${row.key}` ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
                           chevron_right
                         </span>
-                        <span className="truncate">{capitalizeWords(row.key)}</span>
+                        <span className="truncate text-center flex-1 min-w-0">{capitalizeWords(row.key)}</span>
                       </div>
                     </td>
                     {months.map((monthKey, index) => {
@@ -828,6 +821,13 @@ export default function Grid() {
                 />
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => navigate('/forecast')}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              {t('forecastNewYear') || 'Forecast nuevo año'}
+            </button>
           </div>
         </div>
       </div>

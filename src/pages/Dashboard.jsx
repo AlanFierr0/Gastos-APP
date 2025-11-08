@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import Card from '../components/Card.jsx';
 import {useApp} from '../context/AppContext.jsx';
-import {formatMoney, capitalizeWords} from '../utils/format.js';
+import {formatMoney, capitalizeWords, formatNumber} from '../utils/format.js';
 import {useNavigate} from 'react-router-dom';
 import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import Select from '../components/Select.jsx';
@@ -262,7 +262,7 @@ export default function Dashboard() {
             <div className="mt-2 space-y-1">
               <div className={`flex items-center gap-1 text-sm ${trends.income.positive ? 'text-green-600' : 'text-red-500'}`}>
                 <span className="material-symbols-outlined text-sm">{trends.income.positive ? 'trending_up' : 'trending_down'}</span>
-                <span>{trends.income.positive ? '+' : '-'}{Math.abs(trends.income.value).toFixed(1)}%</span>
+                <span>{trends.income.positive ? '+' : '-'}{formatNumber(Math.abs(trends.income.value), 1)}%</span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 {trends.income.comparisonLabel}: {formatMoney(trends.income.previousValue, 'ARS', { sign: 'none' })}
@@ -279,7 +279,7 @@ export default function Dashboard() {
             <div className="mt-2 space-y-1">
               <div className={`flex items-center gap-1 text-sm ${trends.expenses.positive ? 'text-green-600' : 'text-red-500'}`}>
                 <span className="material-symbols-outlined text-sm">{trends.expenses.positive ? 'trending_up' : 'trending_down'}</span>
-                <span>{trends.expenses.positive ? '+' : '-'}{Math.abs(trends.expenses.value).toFixed(1)}%</span>
+                <span>{trends.expenses.positive ? '+' : '-'}{formatNumber(Math.abs(trends.expenses.value), 1)}%</span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 {trends.expenses.comparisonLabel}: {formatMoney(trends.expenses.previousValue, 'ARS', { sign: 'none' })}
@@ -298,7 +298,7 @@ export default function Dashboard() {
                 <>
                   <div className={`flex items-center gap-1 text-sm ${trends.balance.change.positive ? 'text-green-600' : 'text-red-500'}`}>
                     <span className="material-symbols-outlined text-sm">{trends.balance.change.positive ? 'trending_up' : 'trending_down'}</span>
-                    <span>{trends.balance.change.positive ? '+' : '-'}{Math.abs(trends.balance.change.value).toFixed(1)}%</span>
+                    <span>{trends.balance.change.positive ? '+' : '-'}{formatNumber(Math.abs(trends.balance.change.value), 1)}%</span>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     {trends.balance.comparisonLabel}: {formatMoney(trends.balance.previousValue, 'ARS')}
