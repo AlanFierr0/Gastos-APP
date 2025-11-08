@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 import { useApp } from '../context/AppContext.jsx';
+import Logo from './Logo.jsx';
 
 const linkClass = ({ isActive }) =>
   clsx(
@@ -15,6 +16,9 @@ export default function Sidebar() {
   const { t } = useApp();
   return (
     <aside className="w-64 shrink-0 border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-background-dark sticky top-0 h-screen overflow-y-auto">
+      <div className="p-2 border-b border-gray-200 dark:border-gray-800 bg-background-dark">
+        <Logo />
+      </div>
       <nav className="flex flex-col gap-2 p-4">
         <NavLink className={linkClass} to="/dashboard">
           <span className="material-symbols-outlined">dashboard</span>

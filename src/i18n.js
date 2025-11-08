@@ -1,6 +1,6 @@
 export const dictionaries = {
   en: {
-    appName: 'Gastos APP',
+    appName: 'Spendo',
     dashboard: 'Dashboard',
     expenses: 'Expenses',
     income: 'Income',
@@ -184,7 +184,7 @@ export const dictionaries = {
     forecastWarningMessage: 'There is no real data for this period. The values shown are forecasts.',
   },
   es: {
-    appName: 'Gastos APP',
+    appName: 'Spendo',
     dashboard: 'Dashboard',
     expenses: 'Gastos',
     income: 'Ingresos',

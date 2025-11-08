@@ -2,6 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Martius font from Fontspace */
+@font-face {
+  font-family: 'Martius';
+  src: url('/fonts/Martius-LV9L4.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Martius';
+  src: url('/fonts/Martius-LV9L4.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Martius';
+  src: url('/fonts/Martius-LV9L4.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Martius';
+  src: url('/fonts/MartiusItalic-PVA4E.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light dark;
 }

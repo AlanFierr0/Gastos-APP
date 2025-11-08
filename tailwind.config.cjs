@@ -19,6 +19,8 @@ module.exports = {
       },
       fontFamily: {
         display: ['Inter', 'sans-serif'],
+        logo: ['Manrope', 'Poppins', 'sans-serif'],
+        martius: ['Martius', 'Poppins', 'sans-serif'],
       },
     },
   },

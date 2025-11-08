@@ -253,6 +253,7 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
           <YAxis tickFormatter={formatYAxisValue} />
           <Tooltip 
             cursor={{ fill: 'transparent' }}
+            shared={false}
             content={customTooltip || (tooltipLabelFromDatum ? (
             ({ active, payload }) => {
               if (active && payload && payload.length) {

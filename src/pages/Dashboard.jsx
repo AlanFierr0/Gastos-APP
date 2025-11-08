@@ -108,6 +108,24 @@ export default function Dashboard() {
       const change = ((curr - prev) / prev) * 100;
       return { value: change, positive: change >= 0 };
     };
+    
+    // Special calculation for balance: when both are negative, we need to invert the logic
+    const calcBalanceChange = (curr, prev) => {
+      if (!prev || prev === 0) return null;
+      // If both are negative, calculate the absolute change
+      if (curr < 0 && prev < 0) {
+        // More negative = worse (negative change)
+        // Less negative = better (positive change)
+        const change = ((Math.abs(curr) - Math.abs(prev)) / Math.abs(prev)) * 100;
+        // If current is more negative (worse), change should be negative
+        const isWorse = Math.abs(curr) > Math.abs(prev);
+        return { value: isWorse ? -Math.abs(change) : Math.abs(change), positive: !isWorse };
+      }
+      // For other cases, use normal calculation
+      const change = ((curr - prev) / prev) * 100;
+      return { value: change, positive: change >= 0 };
+    };
+    
     const incomeChange = calcChange(monthTotals.totalIncome, previousPeriodTotals.totalIncome);
     const expensesChange = calcChange(monthTotals.totalExpenses, previousPeriodTotals.totalExpenses);
     const comparisonLabel = periodType === 'month' 
@@ -137,7 +155,7 @@ export default function Dashboard() {
         : { 
             positive: false, 
             label: 'Negative', 
-            change: calcChange(monthTotals.balance, previousPeriodTotals.balance),
+            change: calcBalanceChange(monthTotals.balance, previousPeriodTotals.balance),
             previousValue: previousPeriodTotals.balance,
             comparisonLabel
           },
@@ -183,7 +201,7 @@ export default function Dashboard() {
     }
 
     mainCategories.sort((a, b) => b.value - a.value);
-    if (othersSum > 0) mainCategories.push({ name: t('others') || 'Otros', value: othersSum });
+    if (othersSum > 0) mainCategories.push({ name: 'Otros', value: othersSum });
 
     return { pieData: mainCategories, othersCategories: othersCats };
   }, [periodExpenses, t]);
@@ -266,7 +284,6 @@ export default function Dashboard() {
           {trends.income && (
             <div className="mt-2 space-y-1">
               <div className={`flex items-center gap-1 text-sm ${trends.income.positive ? 'text-green-600' : 'text-red-500'}`}>
-                <span className="material-symbols-outlined text-sm">{trends.income.positive ? 'trending_up' : 'trending_down'}</span>
                 <span>{trends.income.positive ? '+' : '-'}{formatNumber(Math.abs(trends.income.value), 1)}%</span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -283,7 +300,6 @@ export default function Dashboard() {
           {trends.expenses && (
             <div className="mt-2 space-y-1">
               <div className={`flex items-center gap-1 text-sm ${trends.expenses.positive ? 'text-green-600' : 'text-red-500'}`}>
-                <span className="material-symbols-outlined text-sm">{trends.expenses.positive ? 'trending_up' : 'trending_down'}</span>
                 <span>{trends.expenses.positive ? '+' : '-'}{formatNumber(Math.abs(trends.expenses.value), 1)}%</span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -302,8 +318,7 @@ export default function Dashboard() {
               {trends.balance.change ? (
                 <>
                   <div className={`flex items-center gap-1 text-sm ${trends.balance.change.positive ? 'text-green-600' : 'text-red-500'}`}>
-                    <span className="material-symbols-outlined text-sm">{trends.balance.change.positive ? 'trending_up' : 'trending_down'}</span>
-                    <span>{trends.balance.change.positive ? '+' : '-'}{formatNumber(Math.abs(trends.balance.change.value), 1)}%</span>
+                    <span>{trends.balance.change.value >= 0 ? '+' : ''}{formatNumber(trends.balance.change.value, 1)}%</span>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     {trends.balance.comparisonLabel}: {formatMoneyNoDecimals(trends.balance.previousValue, 'ARS')}
@@ -328,38 +343,41 @@ export default function Dashboard() {
               tooltipLabelFromDatum={false}
               customTooltip={({ active, payload }) => {
                 if (active && payload && payload.length) {
+                  // With shared={false}, payload should only contain the hovered bar
+                  const activeEntry = payload[0];
+                  if (!activeEntry) return null;
+                  
                   const isDark = document.documentElement.classList.contains('dark');
+                  const absValue = Math.abs(activeEntry.value || 0);
+                  const formatted = absValue.toLocaleString('es-AR', { 
+                    style: 'currency', 
+                    currency: 'ARS',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  });
+                  
+                  // Translate the label based on dataKey
+                  let label;
+                  if (activeEntry.dataKey === 'income') {
+                    label = t('incomeGeneric') || 'Ingreso';
+                  } else if (activeEntry.dataKey === 'expenses') {
+                    label = t('expenseGeneric') || 'Gasto';
+                  } else {
+                    label = activeEntry.name || '';
+                  }
+                  
                   return (
                     <div 
                       className={`rounded-lg border p-2 shadow-lg z-50 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
                       style={isDark ? { backgroundColor: 'rgb(31 41 55)', borderColor: 'rgb(55 65 81)' } : {}}
                     >
-                      {payload.map((entry, index) => {
-                        const absValue = Math.abs(entry.value || 0);
-                        const formatted = absValue.toLocaleString('es-AR', { 
-                          style: 'currency', 
-                          currency: 'ARS',
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        });
-                        // Translate the label
-                        let label = entry.name || '';
-                        if (label.toLowerCase() === 'income') {
-                          label = t('incomeGeneric') || 'Ingreso';
-                        } else if (label.toLowerCase() === 'expenses') {
-                          label = t('expenseGeneric') || 'Gasto';
-                        }
-                        return (
-                          <p 
-                            key={index} 
-                            className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
-                            style={isDark ? { color: 'rgb(243 244 246)', backgroundColor: 'transparent' } : {}}
-                          >
-                            <span style={{ color: entry.color || (isDark ? 'rgb(243 244 246)' : '#000') }} className="category-name">{label}: </span>
-                            {formatted}
-                          </p>
-                        );
-                      })}
+                      <p 
+                        className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                        style={isDark ? { color: 'rgb(243 244 246)', backgroundColor: 'transparent' } : {}}
+                      >
+                        <span style={{ color: activeEntry.color || (isDark ? 'rgb(243 244 246)' : '#000') }} className="category-name">{label}: </span>
+                        {formatted}
+                      </p>
                     </div>
                   );
                 }
@@ -376,7 +394,7 @@ export default function Dashboard() {
               data={pieData} 
               onCategoryClick={(categoryName) => {
                 // If clicking on "Otros", pass all the categories that form it
-                if (categoryName === (t('others') || 'Otros')) {
+                if (categoryName === 'Otros') {
                   navigate('/spreadsheet', { state: { filterCategories: othersCategories } });
                 } else {
                   navigate('/spreadsheet', { state: { filterCategory: categoryName } });
