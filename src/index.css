@@ -214,6 +214,38 @@ select.form-select:focus {
   box-shadow: 0 0 0 2px #135bec !important;
 }
 
+/* Select option styling - rounded and blue background for selected items */
+select option {
+  padding: 0.5rem 0.75rem !important;
+  background-color: rgb(31 41 55) !important;
+  color: rgb(243 244 246) !important;
+}
+
+select option:checked {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+}
+
+select option:hover {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+}
+
+.dark select option {
+  background-color: rgb(31 41 55) !important;
+  color: rgb(243 244 246) !important;
+}
+
+.dark select option:checked {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+}
+
+.dark select option:hover {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+}
+
 
 
 

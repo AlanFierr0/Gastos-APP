@@ -6,7 +6,7 @@ export default function Select({ value, onChange, options = [], className = '', 
       <select
         value={value}
         onChange={(e) => onChange && onChange(e.target.value)}
-        className={`h-9 px-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm border border-transparent focus:outline-none focus:ring-2 focus:ring-primary ${buttonClassName}`}
+        className={`h-9 px-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm border-2 border-primary focus:outline-none focus:ring-2 focus:ring-primary ${buttonClassName}`}
       >
         {options.map((opt) => (
           <option key={String(opt.value)} value={opt.value}>

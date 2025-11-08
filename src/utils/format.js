@@ -39,6 +39,34 @@ export function formatNumber(value, decimals = 2) {
   return fixed.replace('.', ',');
 }
 
+export function extractYearMonth(dateStr) {
+  if (!dateStr) return null;
+  // Handle Date objects by converting to ISO string first
+  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
+  
+  // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss... (with or without Z)
+  // Extract year-month directly from string to avoid timezone issues
+  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    if (month >= 1 && month <= 12) return { year, month };
+  }
+  
+  // DD/MM/YYYY format
+  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) {
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    if (month >= 1 && month <= 12) return { year, month };
+  }
+  
+  // Last resort: parse as Date and use UTC (backend stores at 12:00 UTC)
+  const d = new Date(str);
+  if (Number.isNaN(d.getTime())) return null;
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+}
+
 export function capitalizeWords(value) {
   return String(value || '')
     .split(/\s+/)

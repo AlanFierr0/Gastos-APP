@@ -4,6 +4,7 @@ import Card from '../components/Card.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { formatMoney, formatDate } from '../utils/format.js';
 import * as api from '../api/index.js';
+import CustomSelect from '../components/CustomSelect.jsx';
 
 export default function Upload() {
   const { t, refreshExpenses, refreshIncome } = useApp();
@@ -254,22 +255,15 @@ export default function Upload() {
                 <label htmlFor="year-select" className="text-sm font-semibold">
                   {t('year') || 'Año'}:
                 </label>
-                <select
+                <CustomSelect
                   id="year-select"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  className="px-2 pr-6 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
-                  style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'8\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%23666\' d=\'M6 9L1 4h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.4rem center', paddingRight: '1.5rem', backgroundSize: '8px 8px' }}
-                >
-                  {Array.from({ length: 2100 - 1980 + 1 }, (_, i) => {
+                  value={String(selectedYear)}
+                  onChange={(v) => setSelectedYear(Number(v))}
+                  options={Array.from({ length: 2100 - 1980 + 1 }, (_, i) => {
                     const year = 1980 + i;
-                    return (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    );
+                    return { value: String(year), label: String(year) };
                   })}
-                </select>
+                />
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {t('uploadYearHint') || 'Todas las fechas se ajustarán a este año'}
                 </p>
@@ -389,14 +383,15 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
     return (
       <tr className="border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/20">
         <td className="p-2">
-          <select
+          <CustomSelect
             value={editedRecord.kind}
-            onChange={(e) => handleFieldChange('kind', e.target.value)}
-            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
-          >
-            <option value="expense">{t('expense')}</option>
-            <option value="income">{t('income')}</option>
-          </select>
+            onChange={(v) => handleFieldChange('kind', v)}
+            options={[
+              { value: 'expense', label: t('expense') },
+              { value: 'income', label: t('income') },
+            ]}
+            className="w-full"
+          />
         </td>
         <td className="p-2">
           <input

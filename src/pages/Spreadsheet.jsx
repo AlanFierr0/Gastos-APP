@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext.jsx';
-import { formatMoney } from '../utils/format.js';
+import { formatMoney, formatMoneyNoDecimals, extractYearMonth, capitalizeWords } from '../utils/format.js';
 import Card from '../components/Card.jsx';
-import Select from '../components/Select.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // Generate a deterministic color for a category name
@@ -102,7 +102,10 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
   if (!isEditing) {
     let displayValue = value;
     if (field === 'amount') {
-      displayValue = formatMoney(value, row.currency || 'ARS', { sign: 'none' });
+      const currency = row.currency || 'ARS';
+      displayValue = currency === 'ARS' 
+        ? formatMoneyNoDecimals(value, currency, { sign: 'none' })
+        : formatMoney(value, currency, { sign: 'none' });
     } else if (field === 'date') {
       if (formatMonthYear) {
         displayValue = formatMonthYear(value);
@@ -117,6 +120,8 @@ function EditableCell({ value, row, field, onSave, t, formatMonthYear }) {
           displayValue = '-';
         }
       }
+    } else if (field === 'category') {
+      displayValue = capitalizeWords(value || '');
     }
 
     return (
@@ -352,7 +357,7 @@ export default function Spreadsheet() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm text-[#616f89] dark:text-gray-400" htmlFor="spreadsheet-type-select">{t('type')}:</label>
-            <Select
+            <CustomSelect
               id="spreadsheet-type-select"
               value={filterType}
               onChange={(v) => setFilterType(v)}
@@ -378,7 +383,7 @@ export default function Spreadsheet() {
             {filterCategory && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
                 <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(filterCategory) }} />
-                <span>{filterCategory}</span>
+                <span>{capitalizeWords(filterCategory)}</span>
                 <button
                   onClick={() => setFilterCategory(null)}
                   className="ml-1 hover:opacity-70 transition-opacity"
@@ -404,7 +409,7 @@ export default function Spreadsheet() {
 
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm text-[#616f89] dark:text-gray-400">{t('period')}:</label>
-            <Select
+            <CustomSelect
               value={periodType}
               onChange={(v) => {
                 setPeriodType(v);
@@ -419,7 +424,7 @@ export default function Spreadsheet() {
             />
             
             {periodType !== 'all' && periodOptions.length > 0 && (
-              <Select
+              <CustomSelect
                 value={selectedPeriod}
                 onChange={(v) => setSelectedPeriod(v)}
                 options={periodOptions}
@@ -489,9 +494,9 @@ export default function Spreadsheet() {
                                 filterCategory === row.category ? 'ring-2 ring-primary ring-offset-1' : ''
                               }`}
                               style={{ backgroundColor: getCategoryColor(row.category) }}
-                              title={`${t('filterBy')} ${row.category}`}
+                              title={`${t('filterBy')} ${capitalizeWords(row.category)}`}
                             />
-                            <span>{row.category}</span>
+                            <span>{capitalizeWords(row.category)}</span>
                           </>
                         ) : (
                           <span>-</span>
@@ -600,33 +605,6 @@ function getCurrentYearMonth() {
   return `${year}-${month}`;
 }
 
-function extractYearMonth(dateStr) {
-  if (!dateStr) return null;
-  // Handle Date objects by converting to ISO string first
-  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
-  
-  // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss... (with or without Z)
-  // Extract year-month directly from string to avoid timezone issues
-  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (m) {
-    const year = Number(m[1]);
-    const month = Number(m[2]);
-    if (month >= 1 && month <= 12) return { year, month };
-  }
-  
-  // DD/MM/YYYY format
-  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) {
-    const month = Number(m[2]);
-    const year = Number(m[3]);
-    if (month >= 1 && month <= 12) return { year, month };
-  }
-  
-  // Last resort: parse as Date and use UTC (backend stores at 12:00 UTC)
-  const d = new Date(str);
-  if (Number.isNaN(d.getTime())) return null;
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
-}
 
 function buildFullYearMonths(year) {
   const arr = [];

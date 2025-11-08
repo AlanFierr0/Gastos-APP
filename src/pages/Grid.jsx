@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
-import { formatMoneyNoDecimals, capitalizeWords } from '../utils/format.js';
+import { formatMoneyNoDecimals, capitalizeWords, extractYearMonth } from '../utils/format.js';
+import CustomSelect from '../components/CustomSelect.jsx';
 
 function isForecastMonth(monthKey) {
   // monthKey format: "YYYY-MM"
@@ -27,17 +28,6 @@ function getLastPastMonthIndex(months) {
   return -1; // All months are forecast
 }
 
-function extractYearMonth(dateStr) {
-  if (!dateStr) return null;
-  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
-  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return { year: Number(m[1]), month: Number(m[2]) };
-  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return { year: Number(m[3]), month: Number(m[2]) };
-  const d = new Date(str);
-  if (Number.isNaN(d.getTime())) return null;
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
-}
 
 function formatMonthYearLabel(year, month) {
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -406,7 +396,7 @@ export default function Grid() {
     if (editingCell && editingCell.gridType === gridType) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        handleSave();
+        void handleSave();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setEditingCell(null);
@@ -477,7 +467,7 @@ export default function Grid() {
     }
 
     const records = row.monthData[monthKey] || [];
-    const totalAmount = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const totalAmount = Math.round(records.reduce((sum, r) => sum + Number(r.amount || 0), 0));
     const displayValue = totalAmount !== 0 ? formatMoneyNoDecimals(totalAmount, 'ARS', { sign: 'auto' }) : '-';
     const isForecast = isForecastMonth(monthKey);
 
@@ -578,7 +568,7 @@ export default function Grid() {
                       );
                     })}
                     <td className="border-l-2 border-gray-400 dark:border-gray-500 px-1.5 py-1 text-sm text-center font-semibold bg-white dark:bg-gray-900" style={{ width: 95, minWidth: 95 }}>
-                      {formatMoneyNoDecimals(rowTotals.get(row.key) || 0, 'ARS', { sign: 'auto' })}
+                      {formatMoneyNoDecimals(Math.round(rowTotals.get(row.key) || 0), 'ARS', { sign: 'auto' })}
                     </td>
                   </tr>
                   {expandedCategory === `${gridType}-${row.key}` && (
@@ -636,8 +626,8 @@ export default function Grid() {
                                     // Calculate total for this concept
                                     const conceptTotal = concept.records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
                                     
-                                    // Determine if concept has mixed types
-                                    new Set(concept.records.map(r => r.type)).size > 1;
+                                    // Determine if concept has mixed types (unused for now, but kept for future use)
+                                    // const hasMixedTypes = new Set(concept.records.map(r => r.type)).size > 1;
                                     return (
                                         <tr key={`concept-${idx}`} className="border-b-2 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20">
                                         <td className="sticky left-0 border-r-2 border-indigo-300 dark:border-indigo-600 px-1.5 py-1 text-xs text-center bg-white dark:bg-gray-900 z-10" style={{ width: 100, minWidth: 100 }}>
@@ -672,7 +662,7 @@ export default function Grid() {
                                                   onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
                                                       e.preventDefault();
-                                                      handleDetailSave();
+                                                      void handleDetailSave();
                                                     } else if (e.key === 'Escape') {
                                                       e.preventDefault();
                                                       setEditingDetail(null);
@@ -699,12 +689,12 @@ export default function Grid() {
                                               onDoubleClick={() => firstRecord && handleDetailDoubleClick(firstRecord, monthKey, gridType)}
                                               title={firstRecord ? (isForecast ? (t('forecast') || 'Pronóstico') : (t('doubleClickToEdit') || 'Doble click para editar')) : ''}
                                             >
-                                              {monthAmount !== 0 ? formatMoneyNoDecimals(monthAmount, 'ARS', { sign: 'auto' }) : '-'}
+                                              {monthAmount !== 0 ? formatMoneyNoDecimals(Math.round(monthAmount), 'ARS', { sign: 'auto' }) : '-'}
                                             </td>
                                           );
                                         })}
                                         <td className="border-l-2 border-indigo-300 dark:border-indigo-600 px-1.5 py-1 text-sm text-center font-semibold bg-indigo-50 dark:bg-indigo-900/20" style={{ width: 95, minWidth: 95 }}>
-                                          {formatMoneyNoDecimals(conceptTotal, 'ARS', { sign: 'auto' })}
+                                          {formatMoneyNoDecimals(Math.round(conceptTotal), 'ARS', { sign: 'auto' })}
                                         </td>
                                       </tr>
                                     );
@@ -726,12 +716,12 @@ export default function Grid() {
                                         className="border-2 border-indigo-400 dark:border-indigo-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50"
                                         style={{ width: 85, minWidth: 85 }}
                                       >
-                                        {formatMoneyNoDecimals(monthTotal, 'ARS', { sign: 'auto' })}
+                                        {formatMoneyNoDecimals(Math.round(monthTotal), 'ARS', { sign: 'auto' })}
                                       </td>
                                     );
                                   })}
                                   <td className="border-2 border-indigo-400 dark:border-indigo-600 px-1.5 py-1.5 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50" style={{ width: 95, minWidth: 95 }}>
-                                    {formatMoneyNoDecimals(rowTotals.get(row.key) || 0, 'ARS', { sign: 'auto' })}
+                                    {formatMoneyNoDecimals(Math.round(rowTotals.get(row.key) || 0), 'ARS', { sign: 'auto' })}
                                   </td>
                                 </tr>
                               </tfoot>
@@ -758,12 +748,12 @@ export default function Grid() {
                     className={`border-2 border-gray-400 dark:border-gray-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
                     style={{ width: 85, minWidth: 85 }}
                   >
-                    {formatMoneyNoDecimals(monthTotals.get(monthKey) || 0, 'ARS', { sign: 'auto' })}
+                    {formatMoneyNoDecimals(Math.round(monthTotals.get(monthKey) || 0), 'ARS', { sign: 'auto' })}
                   </td>
                 );
               })}
               <td className="border-2 border-gray-400 dark:border-gray-600 px-1.5 py-1.5 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900" style={{ width: 95, minWidth: 95 }}>
-                {formatMoneyNoDecimals(Array.from(monthTotals.values()).reduce((sum, val) => sum + val, 0), 'ARS', { sign: 'auto' })}
+                {formatMoneyNoDecimals(Math.round(Array.from(monthTotals.values()).reduce((sum, val) => sum + Number(val || 0), 0)), 'ARS', { sign: 'auto' })}
               </td>
             </tr>
           </tfoot>
@@ -786,19 +776,15 @@ export default function Grid() {
               <label htmlFor="year-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('year') || 'Año'}:
               </label>
-              <select
+              <CustomSelect
                 id="year-select"
-                value={selectedYear || ''}
-                onChange={(e) => setSelectedYear(e.target.value === '' ? null : Number(e.target.value))}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-              >
-                <option value="">{t('allYears') || 'Todos los años'}</option>
-                {availableYears.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
+                value={selectedYear !== null ? String(selectedYear) : ''}
+                onChange={(v) => setSelectedYear(v === '' ? null : Number(v))}
+                options={[
+                  { value: '', label: t('allYears') || 'Todos los años' },
+                  ...availableYears.map((year) => ({ value: String(year), label: String(year) }))
+                ]}
+              />
             </div>
             <div className="flex items-center gap-2">
               <label htmlFor="forecast-toggle" className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -826,7 +812,7 @@ export default function Grid() {
               onClick={() => navigate('/forecast')}
               className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
-              {t('forecastNewYear') || 'Forecast nuevo año'}
+              {t('forecastNewYear') || 'Forecast año nuevo'}
             </button>
           </div>
         </div>

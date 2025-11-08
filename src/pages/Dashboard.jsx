@@ -1,10 +1,10 @@
 import React, {useMemo, useState} from 'react';
 import Card from '../components/Card.jsx';
 import {useApp} from '../context/AppContext.jsx';
-import {formatMoney, capitalizeWords, formatNumber} from '../utils/format.js';
+import {formatMoneyNoDecimals, capitalizeWords, formatNumber, extractYearMonth} from '../utils/format.js';
 import {useNavigate} from 'react-router-dom';
 import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
-import Select from '../components/Select.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 
 export default function Dashboard() {
   const { expenses, income, t } = useApp();
@@ -221,7 +221,7 @@ export default function Dashboard() {
           >
             {t('addExpense')}
           </button>
-          <Select
+          <CustomSelect
             value={periodType}
             onChange={(v) => {
               setPeriodType(v);
@@ -232,7 +232,7 @@ export default function Dashboard() {
               { value: 'year', label: t('periodYear') },
             ]}
           />
-          <Select
+          <CustomSelect
             value={effectivePeriod}
             onChange={(v) => setSelectedPeriod(v)}
             options={periodOptions}
@@ -256,7 +256,7 @@ export default function Dashboard() {
         <Card title={t('totalIncome')}>
           <p className="text-3xl font-bold">
             <span className="text-sm font-normal mr-1">ARS</span>
-            {formatMoney(monthTotals.totalIncome, 'ARS', { sign: 'none' })}
+            {formatMoneyNoDecimals(monthTotals.totalIncome, 'ARS', { sign: 'none' })}
           </p>
           {trends.income && (
             <div className="mt-2 space-y-1">
@@ -265,7 +265,7 @@ export default function Dashboard() {
                 <span>{trends.income.positive ? '+' : '-'}{formatNumber(Math.abs(trends.income.value), 1)}%</span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                {trends.income.comparisonLabel}: {formatMoney(trends.income.previousValue, 'ARS', { sign: 'none' })}
+                {trends.income.comparisonLabel}: {formatMoneyNoDecimals(trends.income.previousValue, 'ARS', { sign: 'none' })}
               </div>
             </div>
           )}
@@ -273,7 +273,7 @@ export default function Dashboard() {
         <Card title={t('totalExpenses')}>
           <p className="text-3xl font-bold">
             <span className="text-sm font-normal mr-1">ARS</span>
-            {formatMoney(monthTotals.totalExpenses, 'ARS', { sign: 'none' })}
+            {formatMoneyNoDecimals(monthTotals.totalExpenses, 'ARS', { sign: 'none' })}
           </p>
           {trends.expenses && (
             <div className="mt-2 space-y-1">
@@ -282,7 +282,7 @@ export default function Dashboard() {
                 <span>{trends.expenses.positive ? '+' : '-'}{formatNumber(Math.abs(trends.expenses.value), 1)}%</span>
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                {trends.expenses.comparisonLabel}: {formatMoney(trends.expenses.previousValue, 'ARS', { sign: 'none' })}
+                {trends.expenses.comparisonLabel}: {formatMoneyNoDecimals(trends.expenses.previousValue, 'ARS', { sign: 'none' })}
               </div>
             </div>
           )}
@@ -290,7 +290,7 @@ export default function Dashboard() {
         <Card title={t('netBalance')}>
           <p className="text-3xl font-bold">
             <span className="text-sm font-normal mr-1">ARS</span>
-            {formatMoney(monthTotals.balance, 'ARS')}
+            {formatMoneyNoDecimals(monthTotals.balance, 'ARS')}
           </p>
           {trends.balance && (
             <div className="mt-2 space-y-1">
@@ -301,7 +301,7 @@ export default function Dashboard() {
                     <span>{trends.balance.change.positive ? '+' : '-'}{formatNumber(Math.abs(trends.balance.change.value), 1)}%</span>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {trends.balance.comparisonLabel}: {formatMoney(trends.balance.previousValue, 'ARS')}
+                    {trends.balance.comparisonLabel}: {formatMoneyNoDecimals(trends.balance.previousValue, 'ARS')}
                   </div>
                 </>
               ) : (
@@ -434,33 +434,6 @@ function isForecastMonth(year, month) {
   return month >= currentMonth;
 }
 
-function extractYearMonth(dateStr) {
-  if (!dateStr) return null;
-  // Handle Date objects by converting to ISO string first
-  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
-  
-  // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss... (with or without Z)
-  // Extract year-month directly from string to avoid timezone issues
-  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (m) {
-    const year = Number(m[1]);
-    const month = Number(m[2]);
-    if (month >= 1 && month <= 12) return { year, month };
-  }
-  
-  // DD/MM/YYYY format
-  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) {
-    const month = Number(m[2]);
-    const year = Number(m[3]);
-    if (month >= 1 && month <= 12) return { year, month };
-  }
-  
-  // Last resort: parse as Date and use UTC (backend stores at 12:00 UTC)
-  const d = new Date(str);
-  if (Number.isNaN(d.getTime())) return null;
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
-}
 
 function buildFullYearMonths(year) {
   const arr = [];

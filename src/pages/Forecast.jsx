@@ -1,19 +1,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
-import { formatMoneyNoDecimals, capitalizeWords } from '../utils/format.js';
-
-function extractYearMonth(dateStr) {
-  if (!dateStr) return null;
-  let str = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr).trim();
-  let m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return { year: Number(m[1]), month: Number(m[2]) };
-  m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return { year: Number(m[3]), month: Number(m[2]) };
-  const d = new Date(str);
-  if (Number.isNaN(d.getTime())) return null;
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
-}
+import { formatMoneyNoDecimals, capitalizeWords, extractYearMonth } from '../utils/format.js';
 
 function formatMonthYearLabel(year, month) {
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
