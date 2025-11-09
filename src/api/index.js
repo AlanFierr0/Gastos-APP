@@ -51,8 +51,8 @@ export async function previewExcel(formData) {
   return data;
 }
 
-export async function confirmImport(records) {
-  const { data } = await http.post('/upload/confirm', { records });
+export async function confirmImport(records, expenseTypeMap = {}) {
+  const { data } = await http.post('/upload/confirm', { records, expenseTypeMap });
   return data;
 }
 
@@ -118,6 +118,61 @@ export async function getFAConfig() {
 
 export async function updateFAConfig(payload) {
   const { data } = await http.put('/fa-config', payload);
+  return data;
+}
+
+export async function getInvestments() {
+  try {
+    const { data } = await http.get('/investments');
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createInvestment(payload) {
+  const { data } = await http.post('/investments', payload);
+  return data;
+}
+
+export async function updateInvestment(id, payload) {
+  const { data } = await http.patch(`/investments/${id}`, payload);
+  return data;
+}
+
+export async function deleteInvestment(id) {
+  const { data } = await http.delete(`/investments/${id}`);
+  return data;
+}
+
+export async function updatePrices() {
+  const { data } = await http.post('/prices/update');
+  return data;
+}
+
+export async function updateInvestmentPrices() {
+  const { data } = await http.post('/prices/update-investments');
+  return data;
+}
+
+export async function getInvestmentOperations(investmentId) {
+  const params = investmentId ? { investmentId } : {};
+  const { data } = await http.get('/investment-operations', { params });
+  return data;
+}
+
+export async function createInvestmentOperation(payload) {
+  const { data } = await http.post('/investment-operations', payload);
+  return data;
+}
+
+export async function updateInvestmentOperation(id, payload) {
+  const { data } = await http.patch(`/investment-operations/${id}`, payload);
+  return data;
+}
+
+export async function deleteInvestmentOperation(id) {
+  const { data } = await http.delete(`/investment-operations/${id}`);
   return data;
 }
 

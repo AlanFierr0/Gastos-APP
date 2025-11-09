@@ -10,6 +10,7 @@ import Spreadsheet from './pages/Spreadsheet.jsx';
 import Grid from './pages/Grid.jsx';
 import Forecast from './pages/Forecast.jsx';
 import FinancialAnalysis from './pages/FinancialAnalysis.jsx';
+import Investment from './pages/Investment.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 const root = createRoot(document.getElementById('root'));
@@ -28,8 +29,9 @@ root.render(
             <Route path="/spreadsheet" element={<Spreadsheet />} />
             <Route path="/grid" element={<Grid />} />
             <Route path="/forecast" element={<Forecast />} />
-            <Route path="*" element={<NotFound />} />
+            <Route path="/investment" element={<Investment />} />
           </Route>
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AppProvider>

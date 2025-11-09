@@ -47,6 +47,7 @@ export default function Grid() {
   const [showForecast, setShowForecast] = useState(false); // Toggle para mostrar/ocultar forecast
   const gridRef = useRef(null);
   const inputRef = useRef(null);
+  const lastEditingKeyRef = useRef(null);
 
   // Get all unique years
   const availableYears = useMemo(() => {
@@ -482,8 +483,30 @@ export default function Grid() {
 
   useEffect(() => {
     if ((editingCell || editingDetail) && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+      // Create a unique key for this editing session
+      const editingKey = editingCell 
+        ? `${editingCell.gridType}-${editingCell.rowIndex}-${editingCell.monthKey}`
+        : editingDetail 
+        ? `${editingDetail.gridType}-${editingDetail.recordId || 'new'}-${editingDetail.monthKey}-${editingDetail.conceptLabel}`
+        : null;
+      
+      // Only select text if this is a new editing session
+      if (editingKey && editingKey !== lastEditingKeyRef.current) {
+        lastEditingKeyRef.current = editingKey;
+        inputRef.current.focus();
+        // Use setTimeout to ensure the input is fully rendered
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.select();
+          }
+        }, 0);
+      } else {
+        // Just focus, don't select (user is already typing)
+        inputRef.current.focus();
+      }
+    } else {
+      // Reset when editing stops
+      lastEditingKeyRef.current = null;
     }
   }, [editingCell, editingDetail]);
 

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import Card from '../components/Card.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { formatMoney, formatDate } from '../utils/format.js';
+import { formatMoney, formatMoneyNoDecimals, formatDate, capitalizeWords } from '../utils/format.js';
 import * as api from '../api/index.js';
 import CustomSelect from '../components/CustomSelect.jsx';
 
@@ -14,6 +14,12 @@ export default function Upload() {
   const [previewData, setPreviewData] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [expenseTypeMap, setExpenseTypeMap] = useState({}); // categoryName -> expenseType
+  const [showExpenseTypeSelection, setShowExpenseTypeSelection] = useState(false);
+  const [newExpenseCategories, setNewExpenseCategories] = useState([]);
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [searchFilter, setSearchFilter] = useState('');
   const selectedFile = watch('file');
 
   const getErrorMessage = (error) => {
@@ -61,6 +67,27 @@ export default function Upload() {
       const result = await api.previewExcel(form);
       const records = result.records || [];
       setPreviewData(records);
+      
+      // Detect expense records that need expenseType selection (all expense records need it)
+      const expenseRecords = records.filter(r => r.kind === 'expense');
+      
+      if (expenseRecords.length > 0) {
+        // Create a map of unique concept keys (category + concept) for expenses
+        const conceptKeys = expenseRecords.map(r => {
+          const cat = (r.categoria || '').toLowerCase();
+          const concept = (r.nombre || r.concepto || '').toLowerCase();
+          return `${cat}::${concept}`;
+        });
+        const uniqueConcepts = [...new Set(conceptKeys)];
+        setNewExpenseCategories(uniqueConcepts);
+        setShowExpenseTypeSelection(true);
+        // Initialize expenseTypeMap with MENSUAL as default for each concept
+        const initialMap = {};
+        uniqueConcepts.forEach(key => {
+          initialMap[key] = 'MENSUAL';
+        });
+        setExpenseTypeMap(initialMap);
+      }
       
       let message = '';
       if (records.length === 0) {
@@ -143,11 +170,22 @@ export default function Upload() {
     setEditingIndex(null);
   };
 
+  const handleExpenseTypeSelectionComplete = () => {
+    setShowExpenseTypeSelection(false);
+  };
+
   const handleConfirmImport = async () => {
     if (!previewData || previewData.length === 0) {
       setStatus(t('noRecordsToImport'));
       return;
     }
+    
+    // If there are new expense categories and expenseTypeMap is not complete, show selection
+    if (newExpenseCategories.length > 0 && Object.keys(expenseTypeMap).length < newExpenseCategories.length) {
+      setShowExpenseTypeSelection(true);
+      return;
+    }
+    
     setLoading(true);
     setStatus(t('uploading'));
     try {
@@ -161,7 +199,7 @@ export default function Upload() {
         return record;
       });
       
-      const result = await api.confirmImport(updatedRecords);
+      const result = await api.confirmImport(updatedRecords, expenseTypeMap);
       let message = result.message || t('importSuccess');
       
       // Build detailed message with errors and warnings
@@ -208,8 +246,122 @@ export default function Upload() {
     setPreviewData(null);
     setEditingIndex(null);
     setStatus(null);
+    setSortColumn(null);
+    setSortDirection('asc');
+    setSearchFilter('');
     reset();
   };
+
+  // Helper function to get expense type label
+  const getExpenseTypeLabel = (expenseType) => {
+    const labels = {
+      'MENSUAL': 'Mensual',
+      'SEMESTRAL': 'Semestral',
+      'ANUAL': 'Anual',
+      'EXCEPCIONAL': 'Excepcional'
+    };
+    return labels[expenseType] || expenseType;
+  };
+
+  // Helper function to get expense type for a record
+  const getRecordExpenseType = (record) => {
+    if (record.kind !== 'expense') return null;
+    const cat = (record.categoria || '').toLowerCase();
+    const concept = (record.nombre || '').toLowerCase();
+    const key = `${cat}::${concept}`;
+    return expenseTypeMap?.[key] || null;
+  };
+
+  // Filter and sort preview data
+  const filteredAndSortedData = useMemo(() => {
+    if (!previewData) return [];
+
+    // Apply year adjustment and filters, preserving original index
+    let processed = previewData.map((record, originalIndex) => {
+      const previewRecord = record.date ? {
+        ...record,
+        date: (() => {
+          const date = new Date(record.date);
+          date.setFullYear(selectedYear);
+          return date.toISOString();
+        })()
+      } : record;
+      return { ...previewRecord, _originalIndex: originalIndex };
+    });
+
+    // Apply search filter
+    if (searchFilter) {
+      const searchLower = searchFilter.toLowerCase();
+      processed = processed.filter((record) => {
+        // Search in type
+        if (record.kind?.toLowerCase().includes(searchLower)) return true;
+        // Search in category
+        if ((record.categoria || '').toLowerCase().includes(searchLower)) return true;
+        // Search in concept
+        if ((record.nombre || '').toLowerCase().includes(searchLower)) return true;
+        // Search in amount
+        if (String(record.amount || '').includes(searchFilter)) return true;
+        // Search in date
+        if (formatDate(record.date).toLowerCase().includes(searchLower)) return true;
+        // Search in temporalidad
+        const expenseType = getRecordExpenseType(record);
+        const typeLabel = expenseType ? getExpenseTypeLabel(expenseType) : '';
+        return typeLabel.toLowerCase().includes(searchLower);
+      });
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      processed = [...processed].sort((a, b) => {
+        let aVal, bVal;
+        
+        switch (sortColumn) {
+          case 'type':
+            aVal = a.kind || '';
+            bVal = b.kind || '';
+            break;
+          case 'category':
+            aVal = (a.categoria || '').toLowerCase();
+            bVal = (b.categoria || '').toLowerCase();
+            break;
+          case 'concept':
+            aVal = (a.nombre || '').toLowerCase();
+            bVal = (b.nombre || '').toLowerCase();
+            break;
+          case 'amount':
+            aVal = Number(a.amount || 0);
+            bVal = Number(b.amount || 0);
+            break;
+          case 'date':
+            aVal = a.date ? new Date(a.date).getTime() : 0;
+            bVal = b.date ? new Date(b.date).getTime() : 0;
+            break;
+          case 'temporalidad':
+            aVal = getExpenseTypeLabel(getRecordExpenseType(a)) || '';
+            bVal = getExpenseTypeLabel(getRecordExpenseType(b)) || '';
+            break;
+          default:
+            return 0;
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return processed;
+  }, [previewData, selectedYear, searchFilter, sortColumn, sortDirection, expenseTypeMap]);
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
 
   return (
     <div className={`flex flex-col gap-6 ${previewData ? 'w-full max-w-full' : 'max-w-6xl'}`}>
@@ -239,6 +391,69 @@ export default function Upload() {
               </button>
             </div>
           </form>
+        </Card>
+      ) : showExpenseTypeSelection ? (
+        <Card>
+          <div className="mb-4">
+            <p className="text-2xl font-bold">Seleccionar tipo de gasto</p>
+            <p className="text-sm text-[#616f89] dark:text-gray-400">
+              Selecciona el tipo de gasto para cada concepto. Esto se usará para el forecast.
+            </p>
+          </div>
+          <div className="mb-6 border border-gray-200 dark:border-gray-700 rounded-lg overflow-visible">
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_1fr_200px] gap-4 p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Categoría</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Concepto</div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Temporalidad</div>
+            </div>
+            {/* Rows */}
+            <div className="divide-y divide-gray-200 dark:divide-gray-700 overflow-visible">
+              {newExpenseCategories.map((conceptKey) => {
+                const [categoryName, conceptName] = conceptKey.split('::');
+                return (
+                  <div key={conceptKey} className="grid grid-cols-[1fr_1fr_200px] gap-4 p-3 items-center hover:bg-gray-50 dark:hover:bg-gray-800/50 relative">
+                    <div className="text-sm text-gray-900 dark:text-gray-100 font-medium">
+                      {capitalizeWords(categoryName)}
+                    </div>
+                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                      {capitalizeWords(conceptName)}
+                    </div>
+                    <div className="flex-shrink-0 relative z-10">
+                      <CustomSelect
+                        value={expenseTypeMap[conceptKey] || 'MENSUAL'}
+                        onChange={(value) => setExpenseTypeMap(prev => ({ ...prev, [conceptKey]: value }))}
+                        options={[
+                          { value: 'MENSUAL', label: 'Mensual' },
+                          { value: 'SEMESTRAL', label: 'Semestral' },
+                          { value: 'ANUAL', label: 'Anual' },
+                          { value: 'EXCEPCIONAL', label: 'Excepcional' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setShowExpenseTypeSelection(false);
+                setExpenseTypeMap({});
+                setNewExpenseCategories([]);
+              }}
+              className="h-12 px-8 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleExpenseTypeSelectionComplete}
+              className="h-12 px-8 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 transition-colors"
+            >
+              Continuar
+            </button>
+          </div>
         </Card>
       ) : previewData ? (
         <div className="flex flex-col gap-6 pb-24">
@@ -273,40 +488,130 @@ export default function Upload() {
 
           {previewData.length > 0 ? (
             <Card>
+              <div className="mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-gray-500 dark:text-gray-400">search</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar en todas las columnas..."
+                    value={searchFilter}
+                    onChange={(e) => setSearchFilter(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  {searchFilter && (
+                    <button
+                      onClick={() => setSearchFilter('')}
+                      className="px-2 py-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-white dark:bg-gray-900 z-10">
                     <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left p-2">{t('type')}</th>
-                      <th className="text-left p-2">{t('category')}</th>
-                      <th className="text-left p-2">{t('concept') || 'Concepto'}</th>
-                      <th className="text-left p-2">{t('amount')}</th>
-                      <th className="text-left p-2">{t('date')}</th>
-                      <th className="text-left p-2">{t('notes')}</th>
+                      <th className="text-left p-2">
+                        <button
+                          onClick={() => handleSort('type')}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          {t('type')}
+                          {sortColumn === 'type' && (
+                            <span className="material-symbols-outlined text-xs">
+                              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      <th className="text-left p-2">
+                        <button
+                          onClick={() => handleSort('category')}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          {t('category')}
+                          {sortColumn === 'category' && (
+                            <span className="material-symbols-outlined text-xs">
+                              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      <th className="text-left p-2">
+                        <button
+                          onClick={() => handleSort('concept')}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          {t('concept') || 'Concepto'}
+                          {sortColumn === 'concept' && (
+                            <span className="material-symbols-outlined text-xs">
+                              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      <th className="text-left p-2">
+                        <button
+                          onClick={() => handleSort('amount')}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          {t('amount')}
+                          {sortColumn === 'amount' && (
+                            <span className="material-symbols-outlined text-xs">
+                              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      <th className="text-left p-2">
+                        <button
+                          onClick={() => handleSort('date')}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          {t('date')}
+                          {sortColumn === 'date' && (
+                            <span className="material-symbols-outlined text-xs">
+                              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      <th className="text-left p-2">
+                        <button
+                          onClick={() => handleSort('temporalidad')}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
+                          Temporalidad
+                          {sortColumn === 'temporalidad' && (
+                            <span className="material-symbols-outlined text-xs">
+                              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
                       <th className="text-left p-2">{t('edit')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {previewData.map((record, index) => {
-                      // Show record with updated year in preview
-                      const previewRecord = record.date ? {
-                        ...record,
-                        date: (() => {
-                          const date = new Date(record.date);
-                          date.setFullYear(selectedYear);
-                          return date.toISOString();
-                        })()
-                      } : record;
+                    {filteredAndSortedData.map((record, index) => {
+                      const originalIndex = record._originalIndex ?? index;
+                      // Remove _originalIndex from record before passing to RecordRow
+                      const { _originalIndex, ...cleanRecord } = record;
                       return (
                         <RecordRow
-                          key={index}
-                          record={previewRecord}
-                          index={index}
-                          isEditing={editingIndex === index}
+                          key={`${originalIndex}-${index}`}
+                          record={cleanRecord}
+                          index={originalIndex}
+                          isEditing={editingIndex === originalIndex}
                           onEdit={handleEditRecord}
                           onSave={handleSaveEdit}
                           onCancel={handleCancelEdit}
                           onRemove={handleRemoveRecord}
+                          expenseTypeMap={expenseTypeMap}
+                          onExpenseTypeChange={(key, value) => {
+                            setExpenseTypeMap(prev => ({ ...prev, [key]: value }));
+                          }}
                           t={t}
                         />
                       );
@@ -333,7 +638,7 @@ export default function Upload() {
               </button>
               <button
                 onClick={handleConfirmImport}
-                disabled={loading || previewData.length === 0}
+                disabled={loading || previewData.length === 0 || showExpenseTypeSelection}
                 className="h-12 px-8 rounded-lg bg-primary text-white font-bold disabled:opacity-50 hover:bg-primary/90 transition-colors"
               >
                 {loading ? t('uploading') : t('confirmImport')}
@@ -362,7 +667,7 @@ export default function Upload() {
   );
 }
 
-function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemove, t }) {
+function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemove, expenseTypeMap, onExpenseTypeChange, t }) {
   const [editedRecord, setEditedRecord] = useState(record);
 
   React.useEffect(() => {
@@ -427,12 +732,33 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
           />
         </td>
         <td className="p-2">
-          <input
-            type="text"
-            value={editedRecord.nota || ''}
-            onChange={(e) => handleFieldChange('nota', e.target.value || '')}
-            className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
-          />
+          {editedRecord.kind === 'expense' ? (
+            <CustomSelect
+              value={(() => {
+                const cat = (editedRecord.categoria || '').toLowerCase();
+                const concept = (editedRecord.nombre || '').toLowerCase();
+                const key = `${cat}::${concept}`;
+                return expenseTypeMap?.[key] || 'MENSUAL';
+              })()}
+              onChange={(v) => {
+                const cat = (editedRecord.categoria || '').toLowerCase();
+                const concept = (editedRecord.nombre || '').toLowerCase();
+                const key = `${cat}::${concept}`;
+                if (onExpenseTypeChange) {
+                  onExpenseTypeChange(key, v);
+                }
+              }}
+              options={[
+                { value: 'MENSUAL', label: 'Mensual' },
+                { value: 'SEMESTRAL', label: 'Semestral' },
+                { value: 'ANUAL', label: 'Anual' },
+                { value: 'EXCEPCIONAL', label: 'Excepcional' },
+              ]}
+              className="w-full"
+            />
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
         </td>
         <td className="p-2">
           <div className="flex gap-1">
@@ -454,14 +780,39 @@ function RecordRow({ record, index, isEditing, onEdit, onSave, onCancel, onRemov
     );
   }
 
+  const getExpenseTypeLabel = (expenseType) => {
+    const labels = {
+      'MENSUAL': 'Mensual',
+      'SEMESTRAL': 'Semestral',
+      'ANUAL': 'Anual',
+      'EXCEPCIONAL': 'Excepcional'
+    };
+    return labels[expenseType] || expenseType;
+  };
+
+  const getExpenseType = () => {
+    if (record.kind !== 'expense') return null;
+    const cat = (record.categoria || '').toLowerCase();
+    const concept = (record.nombre || '').toLowerCase();
+    const key = `${cat}::${concept}`;
+    return expenseTypeMap?.[key] || null;
+  };
+
   return (
     <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
       <td className="p-2">{record.kind === 'income' ? t('income') : t('expense')}</td>
-      <td className="p-2">{record.categoria || '-'}</td>
-      <td className="p-2">{record.nombre || '-'}</td>
-      <td className="p-2">{formatMoney(record.amount, record.currency || 'ARS', { sign: 'auto' })}</td>
+      <td className="p-2">{capitalizeWords(record.categoria || '-')}</td>
+      <td className="p-2">{capitalizeWords(record.nombre || '-')}</td>
+      <td className="p-2">
+        {(record.currency || 'ARS') === 'ARS' 
+          ? formatMoneyNoDecimals(record.amount, 'ARS', { sign: 'auto' })
+          : formatMoney(record.amount, record.currency, { sign: 'auto' })
+        }
+      </td>
       <td className="p-2">{formatDate(record.date)}</td>
-      <td className="p-2">{record.nota || '-'}</td>
+      <td className="p-2">
+        {getExpenseType() ? getExpenseTypeLabel(getExpenseType()) : '-'}
+      </td>
       <td className="p-2">
         <div className="flex gap-1">
           <button

@@ -194,6 +194,7 @@ export function AppProvider({ children }) {
           note: newExpense.note,
           currency: newExpense.currency,
           categoryId,
+          expenseType: newExpense.expenseType,
         };
         const saved = await api.createExpense(payload);
         if (saved && saved.id) {

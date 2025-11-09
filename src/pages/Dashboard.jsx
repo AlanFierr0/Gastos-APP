@@ -1,13 +1,15 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useState, useEffect} from 'react';
 import Card from '../components/Card.jsx';
 import {useApp} from '../context/AppContext.jsx';
 import {formatMoneyNoDecimals, capitalizeWords, formatNumber, extractYearMonth} from '../utils/format.js';
 import {useNavigate} from 'react-router-dom';
 import {BarCompare, PieBreakdown} from '../components/Chart.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
+import * as api from '../api/index.js';
 
 export default function Dashboard() {
   const { expenses, income, t } = useApp();
+  const [investments, setInvestments] = useState([]);
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getLastNonForecastMonth());
   const navigate = useNavigate();
@@ -193,7 +195,7 @@ export default function Dashboard() {
 
     for (const item of allData) {
       if (item.value >= threshold) {
-        mainCategories.push({ name: item.name, value: item.value });
+        mainCategories.push({ name: item.name, value: item.value, originalName: item.originalName });
       } else {
         othersSum += item.value;
         othersCats.push(item.originalName);
@@ -216,16 +218,106 @@ export default function Dashboard() {
   }, [periodOptions, effectivePeriod, monthTotals]);
 
 
-  function handleGoToIncome() {
-    navigate('/income', { state: { openForm: true } });
+  function handleGoToInvestment() {
+    navigate('/investment');
   }
 
-  function handleGoToExpenses() {
-    navigate('/expenses', { state: { openForm: true } });
-  }
+  useEffect(() => {
+    async function loadInvestments() {
+      try {
+        const data = await api.getInvestments();
+        setInvestments(data || []);
+      } catch (error) {
+        console.error('Error loading investments:', error);
+      }
+    }
+    loadInvestments();
+  }, []);
+
+  // Calcular métricas de inversiones
+  const investmentMetrics = useMemo(() => {
+    if (!investments || investments.length === 0) {
+      return {
+        totalCurrent: 0,
+        totalOriginal: 0,
+        totalGain: 0,
+        totalGainPercent: 0,
+        byType: {
+          crypto: { current: 0, original: 0, gain: 0 },
+          equity: { current: 0, original: 0, gain: 0 },
+          moneda: { current: 0, original: 0, gain: 0 },
+        },
+      };
+    }
+
+    let totalCurrent = 0;
+    let totalOriginal = 0;
+    const byType = {
+      crypto: { current: 0, original: 0, gain: 0 },
+      equity: { current: 0, original: 0, gain: 0 },
+      moneda: { current: 0, original: 0, gain: 0 },
+    };
+
+    investments.forEach(inv => {
+      const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
+      const originalValue = inv.originalAmount || 0;
+      const gain = currentValue - originalValue;
+
+      totalCurrent += currentValue;
+      totalOriginal += originalValue;
+
+      const typeName = inv.category?.type?.name?.toLowerCase() || '';
+      if (byType[typeName]) {
+        byType[typeName].current += currentValue;
+        byType[typeName].original += originalValue;
+        byType[typeName].gain += gain;
+      }
+    });
+
+    const totalGain = totalCurrent - totalOriginal;
+    const totalGainPercent = totalOriginal > 0 ? ((totalGain / totalOriginal) * 100) : 0;
+
+    return {
+      totalCurrent,
+      totalOriginal,
+      totalGain,
+      totalGainPercent,
+      byType,
+    };
+  }, [investments]);
+
+  // Datos para el gráfico de distribución por tipo
+  const investmentPieData = useMemo(() => {
+    const data = [];
+    if (investmentMetrics.byType.crypto.current > 0) {
+      data.push({
+        name: 'Crypto',
+        value: investmentMetrics.byType.crypto.current,
+        original: investmentMetrics.byType.crypto.original,
+        gain: investmentMetrics.byType.crypto.gain,
+      });
+    }
+    if (investmentMetrics.byType.equity.current > 0) {
+      data.push({
+        name: 'Equity',
+        value: investmentMetrics.byType.equity.current,
+        original: investmentMetrics.byType.equity.original,
+        gain: investmentMetrics.byType.equity.gain,
+      });
+    }
+    if (investmentMetrics.byType.moneda.current > 0) {
+      data.push({
+        name: 'Moneda',
+        value: investmentMetrics.byType.moneda.current,
+        original: investmentMetrics.byType.moneda.original,
+        gain: investmentMetrics.byType.moneda.gain,
+      });
+    }
+    return data;
+  }, [investmentMetrics]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-4xl font-black tracking-[-0.033em]">{t('summaryTitle')}</p>
@@ -233,16 +325,16 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleGoToIncome}
-            className="h-9 px-3 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+            onClick={handleGoToInvestment}
+            className="h-9 px-3 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
           >
-            {t('addIncome')}
+            Agregar Inversión
           </button>
           <button
-            onClick={handleGoToExpenses}
-            className="h-9 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            onClick={handleGoToInvestment}
+            className="h-9 px-3 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
           >
-            {t('addExpense')}
+            Agregar Operación
           </button>
           <CustomSelect
             value={periodType}
@@ -336,7 +428,49 @@ export default function Dashboard() {
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card title={t('incomeVsExpenses')} className="lg:col-span-2">
+        {investmentPieData.length > 0 && (
+          <>
+            <Card title="Distribución de Inversiones" className="lg:col-span-1">
+              <PieBreakdown 
+                data={investmentPieData.map(item => ({
+                  name: item.name,
+                  value: item.value,
+                }))}
+                onCategoryClick={() => {
+                  navigate('/investment');
+                }}
+              />
+            </Card>
+            <Card title="Detalle por Tipo" className="lg:col-span-2">
+              <div className="space-y-4">
+                {investmentPieData.map(item => {
+                  const gainPercent = item.original > 0 ? ((item.gain / item.original) * 100) : 0;
+                  return (
+                    <div key={item.name} className="border-b border-gray-200 dark:border-gray-700 pb-3 last:border-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-gray-700 dark:text-gray-300">{item.name}</h4>
+                        <span className={`text-sm font-semibold ${item.gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatMoneyNoDecimals(item.gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{formatNumber(gainPercent, 2)}%)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Valor Actual</p>
+                          <p className="font-medium">{formatMoneyNoDecimals(item.value, 'ARS', { sign: 'none' })}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Inversión Original</p>
+                          <p className="font-medium">{formatMoneyNoDecimals(item.original, 'ARS', { sign: 'none' })}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </>
+        )}
+        <Card title={t('incomeVsExpenses')} className={investmentPieData.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}>
           {barData.length ? (
             <BarCompare 
               data={barData} 
@@ -349,35 +483,35 @@ export default function Dashboard() {
                   
                   const isDark = document.documentElement.classList.contains('dark');
                   const absValue = Math.abs(activeEntry.value || 0);
-                  const formatted = absValue.toLocaleString('es-AR', { 
-                    style: 'currency', 
-                    currency: 'ARS',
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  });
+                        const formatted = absValue.toLocaleString('es-AR', { 
+                          style: 'currency', 
+                          currency: 'ARS',
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        });
                   
                   // Translate the label based on dataKey
                   let label;
                   if (activeEntry.dataKey === 'income') {
-                    label = t('incomeGeneric') || 'Ingreso';
+                          label = t('incomeGeneric') || 'Ingreso';
                   } else if (activeEntry.dataKey === 'expenses') {
-                    label = t('expenseGeneric') || 'Gasto';
+                          label = t('expenseGeneric') || 'Gasto';
                   } else {
                     label = activeEntry.name || '';
-                  }
+                        }
                   
-                  return (
+                        return (
                     <div 
                       className={`rounded-lg border p-2 shadow-lg z-50 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
                       style={isDark ? { backgroundColor: 'rgb(31 41 55)', borderColor: 'rgb(55 65 81)' } : {}}
                     >
-                      <p 
-                        className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
-                        style={isDark ? { color: 'rgb(243 244 246)', backgroundColor: 'transparent' } : {}}
-                      >
+                          <p 
+                            className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                            style={isDark ? { color: 'rgb(243 244 246)', backgroundColor: 'transparent' } : {}}
+                          >
                         <span style={{ color: activeEntry.color || (isDark ? 'rgb(243 244 246)' : '#000') }} className="category-name">{label}: </span>
-                        {formatted}
-                      </p>
+                            {formatted}
+                          </p>
                     </div>
                   );
                 }
@@ -388,7 +522,7 @@ export default function Dashboard() {
             <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
           )}
         </Card>
-        <Card title={t('expenseBreakdown')}>
+        <Card title={t('expenseBreakdown')} className={investmentPieData.length > 0 ? "lg:col-span-1" : ""}>
           {pieData.length ? (
             <PieBreakdown 
               data={pieData} 
@@ -397,7 +531,10 @@ export default function Dashboard() {
                 if (categoryName === 'Otros') {
                   navigate('/spreadsheet', { state: { filterCategories: othersCategories } });
                 } else {
-                  navigate('/spreadsheet', { state: { filterCategory: categoryName } });
+                  // Find the originalName for the clicked category
+                  const categoryData = pieData.find(item => item.name === categoryName);
+                  const originalCategoryName = categoryData?.originalName || categoryName;
+                  navigate('/spreadsheet', { state: { filterCategory: originalCategoryName } });
                 }
               }}
             />

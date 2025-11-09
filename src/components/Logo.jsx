@@ -13,7 +13,7 @@ export default function Logo({ className = '', showLink = true }) {
         className="h-16 w-16 object-contain flex-shrink-0"
       />
       <span 
-        className="font-semibold text-2xl text-[#F0FFF4] tracking-[0.02em]"
+        className="font-semibold text-2xl text-gray-900 dark:text-[#F0FFF4] tracking-[0.02em]"
         style={{ 
           fontFamily: 'Martius, Poppins, sans-serif',
           fontWeight: 600

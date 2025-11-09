@@ -273,7 +273,12 @@ export default function Spreadsheet() {
         return normalizedCategories.includes(categoryName);
       });
     } else if (filterCategory) {
-      data = data.filter((d) => d.category === filterCategory);
+      // Normalize both sides for comparison to handle case differences
+      const normalizedFilter = String(filterCategory || '').trim().toLowerCase();
+      data = data.filter((d) => {
+        const categoryName = String(d.category || '').trim().toLowerCase();
+        return categoryName === normalizedFilter;
+      });
     }
     if (searchTerm.trim()) {
       const q = searchTerm.trim().toLowerCase();
