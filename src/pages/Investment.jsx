@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext.jsx';
+import { useLocation } from 'react-router-dom';
 import Card from '../components/Card.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
 import Toast from '../components/Toast.jsx';
@@ -8,9 +9,9 @@ import * as api from '../api/index.js';
 
 export default function Investment() {
   const { categories } = useApp();
+  const location = useLocation();
   const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [updatingPrices, setUpdatingPrices] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showOperationForm, setShowOperationForm] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -27,6 +28,7 @@ export default function Investment() {
     currentPrice: '',
     tag: '',
     originalAmount: '',
+    custodyEntity: '',
   });
   const [operationData, setOperationData] = useState({
     type: 'COMPRA',
@@ -69,10 +71,47 @@ export default function Investment() {
     return groups;
   }, [investments]);
 
+  async function updatePricesSilently() {
+    try {
+      // Primero actualizar los precios desde las APIs
+      await api.updatePrices();
+      // Luego actualizar los precios de las inversiones
+      await api.updateInvestmentPrices();
+      // Recargar las inversiones para ver los precios actualizados
+      await loadInvestments();
+    } catch (error) {
+      console.error('Error updating prices silently:', error);
+      // No mostrar error al usuario, solo loguear
+    }
+  }
+
   useEffect(() => {
-    loadInvestments();
     ensureInvestmentCategories();
+    // Cargar inversiones y actualizar precios automáticamente al cargar la página
+    loadInvestments().then(() => {
+      updatePricesSilently();
+    });
   }, []);
+
+  // Efecto separado para manejar la apertura de formularios desde el Dashboard
+  useEffect(() => {
+    if (location.state?.openForm === 'investment') {
+      setShowForm(true);
+      // Limpiar el estado para evitar que se abra cada vez que se renderiza
+      window.history.replaceState({}, document.title);
+    } else if (location.state?.openForm === 'operation') {
+      setSelectedInvestmentId(null);
+      setOperationData({
+        type: 'COMPRA',
+        amount: '',
+        price: '',
+        note: '',
+      });
+      setShowOperationForm(true);
+      // Limpiar el estado para evitar que se abra cada vez que se renderiza
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (investments.length > 0) {
@@ -108,7 +147,9 @@ export default function Investment() {
     setLoading(true);
     try {
       const data = await api.getInvestments();
-      setInvestments(data || []);
+      // Filtrar inversiones con cantidad 0
+      const filteredData = (data || []).filter(inv => inv.currentAmount > 0);
+      setInvestments(filteredData);
     } catch (error) {
       console.error('Error loading investments:', error);
     } finally {
@@ -125,25 +166,6 @@ export default function Investment() {
     }
   }
 
-  async function handleUpdatePrices() {
-    setUpdatingPrices(true);
-    try {
-      const result = await api.updatePrices();
-      setToast({
-        message: `Precios actualizados: ${result.saved} guardados, ${result.investmentsUpdated || 0} inversiones actualizadas`,
-        type: 'success',
-      });
-      await loadInvestments(); // Recargar para ver los nuevos precios
-    } catch (error) {
-      console.error('Error updating prices:', error);
-      setToast({
-        message: 'Error al actualizar los precios',
-        type: 'error',
-      });
-    } finally {
-      setUpdatingPrices(false);
-    }
-  }
 
   // Helper para convertir coma a punto para parseFloat
   function parseDecimal(value) {
@@ -159,7 +181,12 @@ export default function Investment() {
   }
 
   function handleFormChange(field, value) {
-    // Permitir solo números, comas y puntos
+    // Para categoryId, concept, tag y custodyEntity, usar el valor directamente sin limpiar
+    if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'custodyEntity') {
+      setFormData(prev => ({ ...prev, [field]: value }));
+      return;
+    }
+    // Para otros campos numéricos, permitir solo números, comas y puntos
     const cleaned = value.replace(/[^0-9,.-]/g, '');
     // Reemplazar punto por coma si se escribe punto
     const normalized = cleaned.replace('.', ',');
@@ -174,6 +201,7 @@ export default function Investment() {
       currentPrice: '',
       tag: '',
       originalAmount: '',
+      custodyEntity: '',
     });
     setEditingId(null);
     setShowForm(false);
@@ -191,13 +219,32 @@ export default function Investment() {
     }
 
     try {
+      // Obtener el tipo de inversión para determinar si debemos obtener el precio automáticamente
+      const selectedCategory = investmentCategories.find(cat => cat.id === formData.categoryId);
+      const typeName = selectedCategory?.type?.name?.toLowerCase();
+      let currentPrice = formData.currentPrice ? parseDecimal(formData.currentPrice) : undefined;
+
+      // Si no hay precio y es crypto o equity, intentar obtenerlo desde la API
+      if (!currentPrice && (typeName === 'crypto' || typeName === 'equity')) {
+        try {
+          const price = await api.getPrice(formData.concept.trim().toUpperCase());
+          if (price && price > 0) {
+            currentPrice = price;
+          }
+        } catch (error) {
+          console.error('Error getting price from API:', error);
+          // Continuar sin precio si falla
+        }
+      }
+
       const payload = {
         categoryId: formData.categoryId,
         concept: formData.concept.trim(),
         currentAmount: parseDecimal(formData.currentAmount),
-        currentPrice: formData.currentPrice ? parseDecimal(formData.currentPrice) : undefined,
+        currentPrice: currentPrice,
         originalAmount: parseDecimal(formData.originalAmount),
         tag: formData.tag.trim() || undefined,
+        custodyEntity: formData.custodyEntity.trim() || undefined,
       };
 
       if (editingId) {
@@ -206,7 +253,8 @@ export default function Investment() {
         await api.createInvestment(payload);
       }
 
-      await loadInvestments();
+      // Actualizar precios automáticamente después de crear/actualizar
+      await updatePricesSilently();
       resetForm();
       setToast({
         message: editingId ? 'Inversión actualizada exitosamente' : 'Inversión creada exitosamente',
@@ -221,26 +269,6 @@ export default function Investment() {
     }
   }
 
-
-  async function handleDelete(id) {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta inversión?')) {
-      return;
-    }
-    try {
-      await api.deleteInvestment(id);
-      await loadInvestments();
-      setToast({
-        message: 'Inversión eliminada exitosamente',
-        type: 'success',
-      });
-    } catch (error) {
-      console.error('Error deleting investment:', error);
-      setToast({
-        message: 'Error al eliminar la inversión',
-        type: 'error',
-      });
-    }
-  }
 
   async function handleAddOperation(inv) {
     setSelectedInvestmentId(inv.id);
@@ -286,7 +314,13 @@ export default function Investment() {
 
   async function handleOperationSubmit(e) {
     e.preventDefault();
-    if (!selectedInvestmentId) return;
+    if (!selectedInvestmentId) {
+      setToast({
+        message: 'Por favor selecciona una inversión',
+        type: 'warning',
+      });
+      return;
+    }
 
     // Validar que no se venda más de lo que hay
     if (operationData.type === 'VENTA') {
@@ -313,6 +347,8 @@ export default function Investment() {
       });
       await loadInvestments();
       await loadOperations(selectedInvestmentId);
+      // Actualizar precios automáticamente después de crear una operación
+      await updatePricesSilently();
       setShowOperationForm(false);
       setSelectedInvestmentId(null);
       setOperationData({
@@ -384,6 +420,7 @@ export default function Investment() {
                   <th className="text-right py-2 px-3 text-sm font-semibold">Inversión Original</th>
                   <th className="text-right py-2 px-3 text-sm font-semibold">Ganancia/Pérdida</th>
                   <th className="text-left py-2 px-3 text-sm font-semibold">Tag</th>
+                  <th className="text-left py-2 px-3 text-sm font-semibold">Entidad de Custodia</th>
                   <th className="text-center py-2 px-3 text-sm font-semibold">Acciones</th>
                 </tr>
               </thead>
@@ -404,24 +441,19 @@ export default function Investment() {
                           {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
                         </td>
                         <td className="py-2 px-3">{inv.tag || '-'}</td>
+                        <td className="py-2 px-3">{inv.custodyEntity || '-'}</td>
                       <td className="text-center py-2 px-3">
                         <button
                           onClick={() => handleAddOperation(inv)}
-                          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 mr-2"
+                          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
                         >
                           Agregar Operación
-                        </button>
-                        <button
-                          onClick={() => handleDelete(inv.id)}
-                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          Eliminar
                         </button>
                       </td>
                       </tr>
                       {invOperations.length > 0 && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-3 bg-gray-50 dark:bg-gray-900">
+                          <td colSpan={8} className="px-4 py-3 bg-gray-50 dark:bg-gray-900">
                             <div className="text-sm">
                               <p className="font-semibold mb-3 text-gray-700 dark:text-gray-300">Historial de Operaciones:</p>
                               <div className="overflow-x-auto">
@@ -495,11 +527,19 @@ export default function Investment() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleUpdatePrices}
-            disabled={updatingPrices}
-            className="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => {
+              setSelectedInvestmentId(null);
+              setOperationData({
+                type: 'COMPRA',
+                amount: '',
+                price: '',
+                note: '',
+              });
+              setShowOperationForm(true);
+            }}
+            className="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
           >
-            {updatingPrices ? 'Actualizando...' : 'Actualizar Precios'}
+            Agregar Operación
           </button>
           <button
             onClick={() => setShowForm(true)}
@@ -515,19 +555,19 @@ export default function Investment() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Tipo de Inversión *</label>
-              <select
-                value={formData.categoryId}
-                onChange={(e) => handleFormChange('categoryId', e.target.value)}
-                className="w-full h-9 px-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm border-2 border-primary focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              >
-                <option value="">Selecciona un tipo</option>
-                {investmentCategories.map(cat => (
-                  <option key={cat.id} value={cat.id}>
-                    {capitalizeWords(cat.type.name)}
-                  </option>
-                ))}
-              </select>
+              <CustomSelect
+                value={formData.categoryId || ''}
+                onChange={(v) => handleFormChange('categoryId', v)}
+                options={[
+                  { value: '', label: 'Selecciona un tipo' },
+                  ...investmentCategories.map(cat => ({
+                    value: cat.id,
+                    label: capitalizeWords(cat.type.name)
+                  }))
+                ]}
+                className="w-full"
+                buttonClassName="w-full"
+              />
             </div>
 
             <div>
@@ -542,31 +582,17 @@ export default function Investment() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Cantidad Actual *</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formData.currentAmount}
-                  onChange={(e) => handleFormChange('currentAmount', e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Ej: 1,5"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Precio Actual</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formData.currentPrice}
-                  onChange={(e) => handleFormChange('currentPrice', e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Ej: 1000,50"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Cantidad Actual *</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={formData.currentAmount}
+                onChange={(e) => handleFormChange('currentAmount', e.target.value)}
+                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="Ej: 1,5"
+                required
+              />
             </div>
 
             <div>
@@ -593,6 +619,17 @@ export default function Investment() {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium mb-1">Entidad de Custodia</label>
+              <input
+                type="text"
+                value={formData.custodyEntity}
+                onChange={(e) => handleFormChange('custodyEntity', e.target.value)}
+                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="Ej: Binance, IOL, etc."
+              />
+            </div>
+
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -615,6 +652,69 @@ export default function Investment() {
       {showOperationForm && (
         <Card title="Agregar Operación">
           <form onSubmit={handleOperationSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Inversión *</label>
+              <CustomSelect
+                value={selectedInvestmentId || ''}
+                onChange={async (v) => {
+                  setSelectedInvestmentId(v);
+                  const selectedInv = investments.find(inv => inv.id === v);
+                  setOperationAmountError(null);
+                  
+                  if (v) {
+                    loadOperations(v);
+                    
+                    // Obtener precio actual desde la API automáticamente
+                    if (selectedInv) {
+                      const typeName = selectedInv.category?.type?.name?.toLowerCase();
+                      // Solo obtener precio automáticamente para crypto y equity
+                      if (typeName === 'crypto' || typeName === 'equity') {
+                        try {
+                          const price = await api.getPrice(selectedInv.concept.toUpperCase());
+                          if (price && price > 0) {
+                            setOperationData(prev => ({ 
+                              ...prev, 
+                              price: formatDecimal(price)
+                            }));
+                          } else if (selectedInv.currentPrice) {
+                            // Si no hay precio en la API, usar el precio actual de la inversión
+                            setOperationData(prev => ({ 
+                              ...prev, 
+                              price: formatDecimal(selectedInv.currentPrice)
+                            }));
+                          }
+                        } catch (error) {
+                          console.error('Error getting price from API:', error);
+                          // Si falla, usar el precio actual de la inversión si existe
+                          if (selectedInv.currentPrice) {
+                            setOperationData(prev => ({ 
+                              ...prev, 
+                              price: formatDecimal(selectedInv.currentPrice)
+                            }));
+                          }
+                        }
+                      } else if (selectedInv.currentPrice) {
+                        // Para moneda, usar el precio actual si existe
+                        setOperationData(prev => ({ 
+                          ...prev, 
+                          price: formatDecimal(selectedInv.currentPrice)
+                        }));
+                      }
+                    }
+                  }
+                }}
+                options={[
+                  { value: '', label: 'Selecciona una inversión' },
+                  ...investments.map(inv => ({
+                    value: inv.id,
+                    label: `${inv.concept} - ${inv.category?.type?.name ? capitalizeWords(inv.category.type.name) : ''}`
+                  }))
+                ]}
+                className="w-full"
+                buttonClassName="w-full"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">Tipo de Operación *</label>
               <CustomSelect

@@ -218,8 +218,8 @@ export default function Dashboard() {
   }, [periodOptions, effectivePeriod, monthTotals]);
 
 
-  function handleGoToInvestment() {
-    navigate('/investment');
+  function handleGoToInvestment(action = null) {
+    navigate('/investment', { state: { openForm: action } });
   }
 
   useEffect(() => {
@@ -325,13 +325,13 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleGoToInvestment}
+            onClick={() => handleGoToInvestment('investment')}
             className="h-9 px-3 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
           >
             Agregar Inversión
           </button>
           <button
-            onClick={handleGoToInvestment}
+            onClick={() => handleGoToInvestment('operation')}
             className="h-9 px-3 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
           >
             Agregar Operación

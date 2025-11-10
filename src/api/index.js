@@ -155,6 +155,16 @@ export async function updateInvestmentPrices() {
   return data;
 }
 
+export async function getPrice(symbol) {
+  try {
+    const { data } = await http.get(`/prices/symbol/${symbol}`);
+    return data?.price || null;
+  } catch (error) {
+    console.error(`Error getting price for ${symbol}:`, error);
+    return null;
+  }
+}
+
 export async function getInvestmentOperations(investmentId) {
   const params = investmentId ? { investmentId } : {};
   const { data } = await http.get('/investment-operations', { params });

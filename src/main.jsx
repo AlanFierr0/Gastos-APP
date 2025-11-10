@@ -11,6 +11,7 @@ import Grid from './pages/Grid.jsx';
 import Forecast from './pages/Forecast.jsx';
 import FinancialAnalysis from './pages/FinancialAnalysis.jsx';
 import Investment from './pages/Investment.jsx';
+import InvestmentHistory from './pages/InvestmentHistory.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 const root = createRoot(document.getElementById('root'));
@@ -30,6 +31,7 @@ root.render(
             <Route path="/grid" element={<Grid />} />
             <Route path="/forecast" element={<Forecast />} />
             <Route path="/investment" element={<Investment />} />
+            <Route path="/investment-history" element={<InvestmentHistory />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

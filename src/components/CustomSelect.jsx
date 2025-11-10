@@ -30,20 +30,29 @@ export default function CustomSelect({ value, onChange, options = [], className 
       // Use a small delay to avoid closing immediately when opening
       const timeoutId = setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
-      }, 0);
+        document.addEventListener('click', handleClickOutside);
+      }, 100);
 
       return () => {
         clearTimeout(timeoutId);
         document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('click', handleClickOutside);
       };
     }
   }, [isOpen]);
 
-  const selectedOption = options.find(opt => String(opt.value) === String(value)) || options[0];
+  const selectedOption = options.find(opt => {
+    const optValue = opt.value === null || opt.value === undefined ? '' : String(opt.value);
+    const currentValue = value === null || value === undefined ? '' : String(value);
+    return optValue === currentValue;
+  }) || options[0];
 
   const handleSelect = (optionValue, e) => {
     e?.stopPropagation();
-    onChange && onChange(optionValue);
+    e?.preventDefault();
+    if (onChange) {
+      onChange(optionValue);
+    }
     setIsOpen(false);
   };
 

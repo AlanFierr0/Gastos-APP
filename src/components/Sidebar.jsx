@@ -57,6 +57,10 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">trending_up</span>
           {!isMinimized && <span className="text-sm font-medium">Inversiones</span>}
         </NavLink>
+        <NavLink className={(props) => linkClass(props, isMinimized)} to="/investment-history" title={isMinimized ? 'Historial de Inversiones' : ''}>
+          <span className="material-symbols-outlined">history</span>
+          {!isMinimized && <span className="text-sm font-medium">Historial de Inversiones</span>}
+        </NavLink>
         <NavLink className={(props) => linkClass(props, isMinimized)} to="/upload" title={isMinimized ? t('upload') : ''}>
           <span className="material-symbols-outlined">file_upload</span>
           {!isMinimized && <span className="text-sm font-medium">{t('upload')}</span>}
