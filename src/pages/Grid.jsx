@@ -285,7 +285,7 @@ export default function Grid() {
 
     try {
       const numValue = parseFloat(String(editValue).replace(/[^\d.-]/g, ''));
-      if (isNaN(numValue) || numValue < 0) {
+      if (isNaN(numValue)) {
         setEditingCell(null);
         setEditValue('');
         return;
@@ -306,13 +306,11 @@ export default function Grid() {
       if (records.length > 0) {
         const record = records[0];
         const newAmount = Number(record.amount || 0) + difference;
-        if (newAmount >= 0) {
-          const updates = { amount: newAmount };
-          if (gridType === 'expense') {
-            await updateExpense(record.id, updates);
-          } else {
-            await updateIncome(record.id, updates);
-          }
+        const updates = { amount: newAmount };
+        if (gridType === 'expense') {
+          await updateExpense(record.id, updates);
+        } else {
+          await updateIncome(record.id, updates);
         }
       } else {
         // No records exist for this cell - create a new record
@@ -373,7 +371,7 @@ export default function Grid() {
     
     try {
       const numValue = parseFloat(String(value).replace(/[^\d.-]/g, ''));
-      if (isNaN(numValue) || numValue < 0) {
+      if (isNaN(numValue)) {
         setEditingDetail(null);
         return;
       }
@@ -387,8 +385,8 @@ export default function Grid() {
           await updateIncome(recordId, updates);
         }
       } else {
-        // Create new record - only if value is valid and > 0
-        if (numValue <= 0) {
+        // Create new record - only if value is valid (can be negative)
+        if (numValue === 0) {
           setEditingDetail(null);
           return;
         }

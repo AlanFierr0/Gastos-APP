@@ -14,9 +14,7 @@ export default function Investment() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showOperationForm, setShowOperationForm] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedInvestmentId, setSelectedInvestmentId] = useState(null);
-  const [selectedInvestment] = useState(null);
   const [operations, setOperations] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -29,12 +27,14 @@ export default function Investment() {
     tag: '',
     originalAmount: '',
     custodyEntity: '',
+    date: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
   });
   const [operationData, setOperationData] = useState({
     type: 'COMPRA',
     amount: '',
     price: '',
     note: '',
+    date: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
   });
 
   // Get investment categories (Moneda, Equity, Crypto)
@@ -106,6 +106,7 @@ export default function Investment() {
         amount: '',
         price: '',
         note: '',
+        date: new Date().toISOString().split('T')[0],
       });
       setShowOperationForm(true);
       // Limpiar el estado para evitar que se abra cada vez que se renderiza
@@ -181,8 +182,8 @@ export default function Investment() {
   }
 
   function handleFormChange(field, value) {
-    // Para categoryId, concept, tag y custodyEntity, usar el valor directamente sin limpiar
-    if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'custodyEntity') {
+    // Para categoryId, concept, tag, custodyEntity y date, usar el valor directamente sin limpiar
+    if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'custodyEntity' || field === 'date') {
       setFormData(prev => ({ ...prev, [field]: value }));
       return;
     }
@@ -202,6 +203,7 @@ export default function Investment() {
       tag: '',
       originalAmount: '',
       custodyEntity: '',
+      date: new Date().toISOString().split('T')[0],
     });
     setEditingId(null);
     setShowForm(false);
@@ -210,7 +212,7 @@ export default function Investment() {
   async function handleSubmit(e) {
     e.preventDefault();
     
-    if (!formData.categoryId || !formData.concept || !formData.currentAmount || !formData.originalAmount) {
+    if (!formData.categoryId || !formData.concept || !formData.currentAmount || !formData.originalAmount || !formData.date) {
       setToast({
         message: 'Por favor completa todos los campos requeridos',
         type: 'warning',
@@ -245,6 +247,7 @@ export default function Investment() {
         originalAmount: parseDecimal(formData.originalAmount),
         tag: formData.tag.trim() || undefined,
         custodyEntity: formData.custodyEntity.trim() || undefined,
+        date: formData.date,
       };
 
       if (editingId) {
@@ -344,6 +347,7 @@ export default function Investment() {
         amount: parseDecimal(operationData.amount),
         price: operationData.price ? parseDecimal(operationData.price) : undefined,
         note: operationData.note || undefined,
+        date: operationData.date,
       });
       await loadInvestments();
       await loadOperations(selectedInvestmentId);
@@ -356,6 +360,7 @@ export default function Investment() {
         amount: '',
         price: '',
         note: '',
+        date: new Date().toISOString().split('T')[0],
       });
       setToast({
         message: 'Operación creada exitosamente',
@@ -384,9 +389,17 @@ export default function Investment() {
       const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
       return sum + currentValue;
     }, 0);
-    const totalOriginal = investments.reduce((sum, inv) => sum + (inv.originalAmount || 0), 0);
-    const totalGain = totalCurrent - totalOriginal;
-    const totalGainPercent = totalOriginal > 0 ? ((totalGain / totalOriginal) * 100) : 0;
+    const totalCostBasis = investments.reduce((sum, inv) => {
+      // Calcular costo total: inversión original + suma de precios de operaciones de compra
+      const invOperations = operations.filter(op => op.investmentId === inv.id);
+      const purchaseCost = invOperations
+        .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+        .reduce((total, op) => total + (op.price * op.amount), 0);
+      const costBasis = (inv.originalAmount || 0) + purchaseCost;
+      return sum + costBasis;
+    }, 0);
+    const totalGain = totalCurrent - totalCostBasis;
+    const totalGainPercent = totalCostBasis > 0 ? ((totalGain / totalCostBasis) * 100) : 0;
 
     return (
       <Card key={typeName} title={typeLabel} className="mb-6">
@@ -399,7 +412,7 @@ export default function Investment() {
             </div>
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Total Original</p>
-              <p className="text-lg font-bold">{formatMoneyNoDecimals(totalOriginal, 'ARS', { sign: 'none' })}</p>
+              <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCostBasis, 'ARS', { sign: 'none' })}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia/Pérdida</p>
@@ -427,16 +440,23 @@ export default function Investment() {
               <tbody>
                 {investments.map(inv => {
                   const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
-                  const gain = currentValue - inv.originalAmount;
-                  const gainPercent = inv.originalAmount > 0 ? ((gain / inv.originalAmount) * 100) : 0;
+                  // Calcular costo total: inversión original + suma de precios de operaciones de compra
                   const invOperations = operations.filter(op => op.investmentId === inv.id);
+                  const purchaseCost = invOperations
+                    .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+                    .reduce((total, op) => total + (op.price * op.amount), 0);
+                  const costBasis = (inv.originalAmount || 0) + purchaseCost;
+                  const gain = currentValue - costBasis;
+                  const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
                   return (
                     <React.Fragment key={inv.id}>
                       <tr className="border-b border-gray-100 dark:border-gray-800">
                         <td className="py-2 px-3">{inv.concept}</td>
                         <td className="text-right py-2 px-3">{inv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
                         <td className="text-right py-2 px-3">{inv.currentPrice ? formatMoneyNoDecimals(inv.currentPrice, 'ARS', { sign: 'none' }) : '-'}</td>
-                        <td className="text-right py-2 px-3">{formatMoneyNoDecimals(inv.originalAmount, 'ARS', { sign: 'none' })}</td>
+                        <td className="text-right py-2 px-3">
+                          {formatMoneyNoDecimals(costBasis, 'ARS', { sign: 'none' })}
+                        </td>
                         <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
                         </td>
@@ -451,62 +471,6 @@ export default function Investment() {
                         </button>
                       </td>
                       </tr>
-                      {invOperations.length > 0 && (
-                        <tr>
-                          <td colSpan={8} className="px-4 py-3 bg-gray-50 dark:bg-gray-900">
-                            <div className="text-sm">
-                              <p className="font-semibold mb-3 text-gray-700 dark:text-gray-300">Historial de Operaciones:</p>
-                              <div className="overflow-x-auto">
-                                <table className="w-full">
-                                  <thead>
-                                    <tr className="border-b border-gray-300 dark:border-gray-600">
-                                      <th className="text-left py-2 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Operación</th>
-                                      <th className="text-right py-2 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Cantidad</th>
-                                      <th className="text-right py-2 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Precio</th>
-                                      <th className="text-left py-2 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Fecha</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {invOperations.map(op => (
-                                      <tr key={op.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800">
-                                        <td className="py-2.5 px-4">
-                                          <span
-                                            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                              op.type === 'COMPRA'
-                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                                                : op.type === 'VENTA'
-                                                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                            }`}
-                                          >
-                                            {op.type}
-                                          </span>
-                                        </td>
-                                        <td className="text-right py-2.5 px-4 text-gray-700 dark:text-gray-300">
-                                          {op.type === 'AJUSTE' 
-                                            ? op.amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                            : op.amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                          }
-                                        </td>
-                                        <td className="text-right py-2.5 px-4 text-gray-700 dark:text-gray-300">
-                                          {op.price ? formatMoneyNoDecimals(op.price, 'ARS', { sign: 'none' }) : '-'}
-                                        </td>
-                                        <td className="py-2.5 px-4 text-gray-600 dark:text-gray-400 text-xs">
-                                          {new Date(op.createdAt).toLocaleDateString('es-AR', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric',
-                                          })}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                     </React.Fragment>
                   );
                 })}
@@ -604,6 +568,17 @@ export default function Investment() {
                 onChange={(e) => handleFormChange('originalAmount', e.target.value)}
                 className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Ej: 50000,25"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Fecha *</label>
+              <input
+                type="date"
+                value={formData.date}
+                onChange={(e) => handleFormChange('date', e.target.value)}
+                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
                 required
               />
             </div>
@@ -778,6 +753,17 @@ export default function Investment() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-1">Fecha *</label>
+              <input
+                type="date"
+                value={operationData.date}
+                onChange={(e) => setOperationData(prev => ({ ...prev, date: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                required
+              />
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-1">Nota</label>
               <textarea
                 value={operationData.note}
@@ -800,7 +786,7 @@ export default function Investment() {
                 onClick={() => {
                   setShowOperationForm(false);
                   setSelectedInvestmentId(null);
-                  setOperationData({ type: 'COMPRA', amount: '', price: '', note: '' });
+                  setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
                 }}
                 className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
               >
@@ -825,138 +811,6 @@ export default function Investment() {
             </Card>
           )}
         </>
-      )}
-
-      {showHistoryModal && selectedInvestment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowHistoryModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">Historial de Operaciones</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {selectedInvestment.concept} - {selectedInvestment.category?.type?.name && capitalizeWords(selectedInvestment.category.type.name)}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowHistoryModal(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <span className="material-symbols-outlined text-2xl">close</span>
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              {(() => {
-                const invOperations = operations.filter(op => op.investmentId === selectedInvestment.id);
-                if (invOperations.length === 0) {
-                  return (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500 dark:text-gray-400">No hay operaciones registradas para esta inversión.</p>
-                    </div>
-                  );
-                }
-
-                // Calcular el estado acumulado después de cada operación
-                let runningAmount = selectedInvestment.originalAmount;
-                const operationsWithState = invOperations.map(op => {
-                  let newAmount = runningAmount;
-                  if (op.type === 'COMPRA') {
-                    newAmount += op.amount;
-                  } else if (op.type === 'VENTA') {
-                    newAmount -= op.amount;
-                  } else if (op.type === 'AJUSTE') {
-                    newAmount = op.amount;
-                  }
-                  const state = { before: runningAmount, after: newAmount };
-                  runningAmount = newAmount;
-                  return { ...op, state };
-                });
-
-                return (
-                  <div className="space-y-4">
-                    {/* Resumen inicial */}
-                    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Inversión Original</p>
-                          <p className="text-lg font-bold">{formatMoneyNoDecimals(selectedInvestment.originalAmount, 'ARS', { sign: 'none' })}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Cantidad Actual</p>
-                          <p className="text-lg font-bold">{selectedInvestment.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Lista de operaciones */}
-                    <div className="space-y-3">
-                      {operationsWithState.map((op) => (
-                        <div
-                          key={op.id}
-                          className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <span
-                                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                    op.type === 'COMPRA'
-                                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                      : op.type === 'VENTA'
-                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                  }`}
-                                >
-                                  {op.type}
-                                </span>
-                                <span className="text-sm text-gray-500 dark:text-gray-400">
-                                  {new Date(op.createdAt).toLocaleDateString('es-AR', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-4 mt-2">
-                                <div>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">Cantidad</p>
-                                  <p className="font-semibold">
-                                    {op.type === 'AJUSTE' ? op.amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : `${op.type === 'COMPRA' ? '+' : '-'}${op.amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
-                                  </p>
-                                </div>
-                                {op.price && (
-                                  <div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">Precio por Unidad</p>
-                                    <p className="font-semibold">{formatMoneyNoDecimals(op.price, 'ARS', { sign: 'none' })}</p>
-                                  </div>
-                                )}
-                                <div>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">Cantidad Antes</p>
-                                  <p className="font-semibold">{op.state.before.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">Cantidad Después</p>
-                                  <p className="font-semibold">{op.state.after.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
-                                </div>
-                              </div>
-                              {op.note && (
-                                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">Nota</p>
-                                  <p className="text-sm">{op.note}</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
       )}
 
       {toast && (

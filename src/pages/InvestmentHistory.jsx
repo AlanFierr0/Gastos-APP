@@ -91,24 +91,51 @@ export default function InvestmentHistory() {
         <div className="space-y-4">
           {investments.map(inv => {
             const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
-            const gain = currentValue - inv.originalAmount;
-            const gainPercent = inv.originalAmount > 0 ? ((gain / inv.originalAmount) * 100) : 0;
+            // Calcular costo total: inversión original + suma de precios de operaciones de compra
             const invOperations = operations[inv.id] || [];
+            const purchaseCost = invOperations
+              .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+              .reduce((total, op) => total + (op.price * op.amount), 0);
+            const costBasis = (inv.originalAmount || 0) + purchaseCost;
+            const gain = currentValue - costBasis;
+            const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
             const isExpanded = expandedInvestments.has(inv.id);
 
             // Calcular el estado acumulado después de cada operación
-            let runningAmount = inv.originalAmount;
-            const operationsWithState = invOperations.map(op => {
-              let newAmount = runningAmount;
+            // Primero, calcular la cantidad inicial trabajando hacia atrás desde currentAmount
+            let initialAmount = inv.currentAmount || 0;
+            // Aplicar las operaciones en orden inverso para obtener la cantidad inicial
+            for (let i = invOperations.length - 1; i >= 0; i--) {
+              const op = invOperations[i];
               if (op.type === 'COMPRA') {
-                newAmount += op.amount;
+                initialAmount -= op.amount;
               } else if (op.type === 'VENTA') {
-                newAmount -= op.amount;
+                initialAmount += op.amount;
               } else if (op.type === 'AJUSTE') {
-                newAmount = op.amount;
+                // Para ajuste, la cantidad antes es la cantidad que había antes del ajuste
+                // Como el ajuste establece la cantidad a op.amount, la cantidad antes era la que había antes
+                // Pero no podemos saberla exactamente, así que usamos la cantidad calculada hasta ahora
+                // (no cambiamos initialAmount porque ya estamos trabajando hacia atrás)
               }
-              const state = { before: runningAmount, after: newAmount };
-              runningAmount = newAmount;
+            }
+            
+            // Asegurar que la cantidad inicial no sea negativa
+            initialAmount = Math.max(0, initialAmount);
+            
+            // Ahora calcular hacia adelante desde la cantidad inicial
+            let runningAmount = initialAmount;
+            const operationsWithState = invOperations.map(op => {
+              const beforeAmount = runningAmount;
+              let afterAmount = beforeAmount;
+              if (op.type === 'COMPRA') {
+                afterAmount += op.amount;
+              } else if (op.type === 'VENTA') {
+                afterAmount -= op.amount;
+              } else if (op.type === 'AJUSTE') {
+                afterAmount = op.amount;
+              }
+              const state = { before: beforeAmount, after: afterAmount };
+              runningAmount = afterAmount;
               return { ...op, state };
             });
 
@@ -216,7 +243,7 @@ export default function InvestmentHistory() {
                                       {op.type}
                                     </span>
                                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                                      {new Date(op.createdAt).toLocaleDateString('es-AR', {
+                                      {new Date(op.date || op.createdAt).toLocaleDateString('es-AR', {
                                         year: 'numeric',
                                         month: 'long',
                                         day: 'numeric',

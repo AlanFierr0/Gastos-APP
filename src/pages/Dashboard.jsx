@@ -10,6 +10,7 @@ import * as api from '../api/index.js';
 export default function Dashboard() {
   const { expenses, income, t } = useApp();
   const [investments, setInvestments] = useState([]);
+  const [operations, setOperations] = useState({}); // { investmentId: [operations] }
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getLastNonForecastMonth());
   const navigate = useNavigate();
@@ -234,6 +235,27 @@ export default function Dashboard() {
     loadInvestments();
   }, []);
 
+  useEffect(() => {
+    if (investments.length > 0) {
+      // Cargar operaciones para todas las inversiones
+      investments.forEach(inv => {
+        loadOperations(inv.id);
+      });
+    }
+  }, [investments.length]);
+
+  async function loadOperations(investmentId) {
+    try {
+      const data = await api.getInvestmentOperations(investmentId);
+      setOperations(prev => ({
+        ...prev,
+        [investmentId]: data || []
+      }));
+    } catch (error) {
+      console.error('Error loading operations:', error);
+    }
+  }
+
   // Calcular métricas de inversiones
   const investmentMetrics = useMemo(() => {
     if (!investments || investments.length === 0) {
@@ -260,16 +282,21 @@ export default function Dashboard() {
 
     investments.forEach(inv => {
       const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
-      const originalValue = inv.originalAmount || 0;
-      const gain = currentValue - originalValue;
+      // Calcular costo total: inversión original + suma de precios de operaciones de compra
+      const invOperations = operations[inv.id] || [];
+      const purchaseCost = invOperations
+        .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+        .reduce((total, op) => total + (op.price * op.amount), 0);
+      const costBasis = (inv.originalAmount || 0) + purchaseCost;
+      const gain = currentValue - costBasis;
 
       totalCurrent += currentValue;
-      totalOriginal += originalValue;
+      totalOriginal += costBasis;
 
       const typeName = inv.category?.type?.name?.toLowerCase() || '';
       if (byType[typeName]) {
         byType[typeName].current += currentValue;
-        byType[typeName].original += originalValue;
+        byType[typeName].original += costBasis;
         byType[typeName].gain += gain;
       }
     });
@@ -284,7 +311,7 @@ export default function Dashboard() {
       totalGainPercent,
       byType,
     };
-  }, [investments]);
+  }, [investments, operations]);
 
   // Datos para el gráfico de distribución por tipo
   const investmentPieData = useMemo(() => {
