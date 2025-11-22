@@ -264,26 +264,36 @@ export default function Dashboard() {
         totalOriginal: 0,
         totalGain: 0,
         totalGainPercent: 0,
+        totalInvestments: 0,
+        totalOperations: 0,
         byType: {
-          crypto: { current: 0, original: 0, gain: 0 },
-          equity: { current: 0, original: 0, gain: 0 },
-          moneda: { current: 0, original: 0, gain: 0 },
+          crypto: { current: 0, original: 0, gain: 0, count: 0 },
+          equity: { current: 0, original: 0, gain: 0, count: 0 },
+          dolar: { current: 0, original: 0, gain: 0, count: 0 },
         },
       };
     }
 
     let totalCurrent = 0;
     let totalOriginal = 0;
+    let totalOperationsCount = 0;
     const byType = {
-      crypto: { current: 0, original: 0, gain: 0 },
-      equity: { current: 0, original: 0, gain: 0 },
-      moneda: { current: 0, original: 0, gain: 0 },
+      crypto: { current: 0, original: 0, gain: 0, count: 0 },
+      equity: { current: 0, original: 0, gain: 0, count: 0 },
+      dolar: { current: 0, original: 0, gain: 0, count: 0 },
     };
 
     investments.forEach(inv => {
-      const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
+      const typeName = inv.category?.type?.name?.toLowerCase() || '';
+      // Para dólar, el valor actual es simplemente la cantidad (no se multiplica por precio)
+      // Para crypto y equity, se multiplica cantidad por precio
+      const currentValue = typeName === 'dolar' 
+        ? (inv.currentAmount || 0)
+        : (inv.currentAmount || 0) * (inv.currentPrice || 0);
+      
       // Calcular costo total: inversión original + suma de precios de operaciones de compra
       const invOperations = operations[inv.id] || [];
+      totalOperationsCount += invOperations.length;
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
         .reduce((total, op) => total + (op.price * op.amount), 0);
@@ -293,11 +303,11 @@ export default function Dashboard() {
       totalCurrent += currentValue;
       totalOriginal += costBasis;
 
-      const typeName = inv.category?.type?.name?.toLowerCase() || '';
       if (byType[typeName]) {
         byType[typeName].current += currentValue;
         byType[typeName].original += costBasis;
         byType[typeName].gain += gain;
+        byType[typeName].count += 1;
       }
     });
 
@@ -309,37 +319,38 @@ export default function Dashboard() {
       totalOriginal,
       totalGain,
       totalGainPercent,
+      totalInvestments: investments.length,
+      totalOperations: totalOperationsCount,
       byType,
     };
   }, [investments, operations]);
 
   // Datos para el gráfico de distribución por tipo
+  // Siempre mostrar los tres tipos: Crypto, Equity y Dólar
   const investmentPieData = useMemo(() => {
-    const data = [];
-    if (investmentMetrics.byType.crypto.current > 0) {
-      data.push({
+    const data = [
+      {
         name: 'Crypto',
         value: investmentMetrics.byType.crypto.current,
         original: investmentMetrics.byType.crypto.original,
         gain: investmentMetrics.byType.crypto.gain,
-      });
-    }
-    if (investmentMetrics.byType.equity.current > 0) {
-      data.push({
+        count: investmentMetrics.byType.crypto.count,
+      },
+      {
         name: 'Equity',
         value: investmentMetrics.byType.equity.current,
         original: investmentMetrics.byType.equity.original,
         gain: investmentMetrics.byType.equity.gain,
-      });
-    }
-    if (investmentMetrics.byType.moneda.current > 0) {
-      data.push({
-        name: 'Moneda',
-        value: investmentMetrics.byType.moneda.current,
-        original: investmentMetrics.byType.moneda.original,
-        gain: investmentMetrics.byType.moneda.gain,
-      });
-    }
+        count: investmentMetrics.byType.equity.count,
+      },
+      {
+        name: 'Dólar',
+        value: investmentMetrics.byType.dolar.current,
+        original: investmentMetrics.byType.dolar.original,
+        gain: investmentMetrics.byType.dolar.gain,
+        count: investmentMetrics.byType.dolar.count,
+      },
+    ];
     return data;
   }, [investmentMetrics]);
 
@@ -454,28 +465,97 @@ export default function Dashboard() {
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {investmentPieData.length > 0 && (
+      <section className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {investmentMetrics.totalCurrent > 0 && (
           <>
-            <Card title="Distribución de Inversiones" className="lg:col-span-1">
-              <PieBreakdown 
-                data={investmentPieData.map(item => ({
-                  name: item.name,
-                  value: item.value,
-                }))}
-                onCategoryClick={() => {
-                  navigate('/investment');
-                }}
-              />
-            </Card>
+            {/* Columna izquierda: Gráficos de torta apilados */}
+            <div className="lg:col-span-1 space-y-6">
+              <Card title="Distribución de Inversiones">
+                <PieBreakdown 
+                  data={investmentPieData
+                    .filter(item => item.value > 0) // Solo mostrar en el gráfico los que tienen valor
+                    .map(item => ({
+                      name: item.name,
+                      value: item.value,
+                    }))}
+                  onCategoryClick={() => {
+                    navigate('/investment');
+                  }}
+                />
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Total Inversiones</p>
+                      <p className="font-semibold text-base">{investmentMetrics.totalInvestments}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Total Operaciones</p>
+                      <p className="font-semibold text-base">{investmentMetrics.totalOperations}</p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+              <Card title={t('expenseBreakdown')}>
+                {pieData.length ? (
+                  <PieBreakdown 
+                    data={pieData} 
+                    onCategoryClick={(categoryName) => {
+                      // If clicking on "Otros", pass all the categories that form it
+                      if (categoryName === 'Otros') {
+                        navigate('/spreadsheet', { state: { filterCategories: othersCategories } });
+                      } else {
+                        // Find the originalName for the clicked category
+                        const categoryData = pieData.find(item => item.name === categoryName);
+                        const originalCategoryName = categoryData?.originalName || categoryName;
+                        navigate('/spreadsheet', { state: { filterCategory: originalCategoryName } });
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
+                )}
+              </Card>
+            </div>
+            {/* Columna central: Detalle por tipo */}
             <Card title="Detalle por Tipo" className="lg:col-span-2">
               <div className="space-y-4">
+                {/* Totales Generales */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300">Total General</h3>
+                    <span className={`text-lg font-bold ${investmentMetrics.totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatMoneyNoDecimals(investmentMetrics.totalGain, 'ARS')} ({investmentMetrics.totalGainPercent >= 0 ? '+' : ''}{formatNumber(investmentMetrics.totalGainPercent, 2)}%)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Valor Actual Total</p>
+                      <p className="font-semibold text-base">{formatMoneyNoDecimals(investmentMetrics.totalCurrent, 'ARS', { sign: 'none' })}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Inversión Original Total</p>
+                      <p className="font-semibold text-base">{formatMoneyNoDecimals(investmentMetrics.totalOriginal, 'ARS', { sign: 'none' })}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Detalle por Tipo */}
                 {investmentPieData.map(item => {
                   const gainPercent = item.original > 0 ? ((item.gain / item.original) * 100) : 0;
+                  const percentageOfTotal = investmentMetrics.totalCurrent > 0 
+                    ? ((item.value / investmentMetrics.totalCurrent) * 100) 
+                    : 0;
                   return (
                     <div key={item.name} className="border-b border-gray-200 dark:border-gray-700 pb-3 last:border-0">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-gray-700 dark:text-gray-300">{item.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-gray-700 dark:text-gray-300">{item.name}</h4>
+                          {item.count > 0 && (
+                            <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                              {item.count} {item.count === 1 ? 'inversión' : 'inversiones'}
+                            </span>
+                          )}
+                        </div>
                         <span className={`text-sm font-semibold ${item.gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatMoneyNoDecimals(item.gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{formatNumber(gainPercent, 2)}%)
                         </span>
@@ -484,6 +564,11 @@ export default function Dashboard() {
                         <div>
                           <p className="text-xs text-gray-500 dark:text-gray-400">Valor Actual</p>
                           <p className="font-medium">{formatMoneyNoDecimals(item.value, 'ARS', { sign: 'none' })}</p>
+                          {investmentMetrics.totalCurrent > 0 && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                              {formatNumber(percentageOfTotal, 1)}% del total
+                            </p>
+                          )}
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 dark:text-gray-400">Inversión Original</p>
@@ -497,7 +582,7 @@ export default function Dashboard() {
             </Card>
           </>
         )}
-        <Card title={t('incomeVsExpenses')} className={investmentPieData.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}>
+        <Card title={t('incomeVsExpenses')} className={investmentMetrics.totalCurrent > 0 ? "lg:col-span-1" : "lg:col-span-3"}>
           {barData.length ? (
             <BarCompare 
               data={barData} 
@@ -543,26 +628,6 @@ export default function Dashboard() {
                   );
                 }
                 return null;
-              }}
-            />
-          ) : (
-            <p className="text-sm text-[#616f89] dark:text-gray-400">{t('noData')}</p>
-          )}
-        </Card>
-        <Card title={t('expenseBreakdown')} className={investmentPieData.length > 0 ? "lg:col-span-1" : ""}>
-          {pieData.length ? (
-            <PieBreakdown 
-              data={pieData} 
-              onCategoryClick={(categoryName) => {
-                // If clicking on "Otros", pass all the categories that form it
-                if (categoryName === 'Otros') {
-                  navigate('/spreadsheet', { state: { filterCategories: othersCategories } });
-                } else {
-                  // Find the originalName for the clicked category
-                  const categoryData = pieData.find(item => item.name === categoryName);
-                  const originalCategoryName = categoryData?.originalName || categoryName;
-                  navigate('/spreadsheet', { state: { filterCategory: originalCategoryName } });
-                }
               }}
             />
           ) : (

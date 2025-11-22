@@ -12,14 +12,14 @@ export default function InvestmentHistory() {
   // Group investments by category type
   const groupedInvestments = useMemo(() => {
     const groups = {
-      moneda: [],
+      dolar: [],
       equity: [],
       crypto: [],
     };
     
     investments.forEach(inv => {
       const typeName = inv.category?.type?.name?.toLowerCase() || '';
-      if (typeName === 'moneda') groups.moneda.push(inv);
+      if (typeName === 'dolar') groups.dolar.push(inv);
       else if (typeName === 'equity') groups.equity.push(inv);
       else if (typeName === 'crypto') groups.crypto.push(inv);
     });
@@ -81,15 +81,88 @@ export default function InvestmentHistory() {
     if (investments.length === 0) return null;
 
     const typeLabel = {
-      moneda: 'Moneda',
+      dolar: 'Dólar',
       equity: 'Equity',
       crypto: 'Crypto',
     }[typeName] || typeName;
 
+    // Ordenar por valor de mercado descendente para crypto y equity, por cantidad descendente para dólar
+    const sortedInvestments = [...investments];
+    if (typeName === 'crypto' || typeName === 'equity') {
+      sortedInvestments.sort((a, b) => {
+        const valueA = (a.currentAmount || 0) * (a.currentPrice || 0);
+        const valueB = (b.currentAmount || 0) * (b.currentPrice || 0);
+        return valueB - valueA;
+      });
+    } else if (typeName === 'dolar') {
+      sortedInvestments.sort((a, b) => {
+        const amountA = a.currentAmount || 0;
+        const amountB = b.currentAmount || 0;
+        return amountB - amountA;
+      });
+    }
+
+    // Calcular totales
+    const totalCurrent = investments.reduce((sum, inv) => {
+      const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
+      return sum + currentValue;
+    }, 0);
+    const totalCostBasis = investments.reduce((sum, inv) => {
+      const invOperations = operations[inv.id] || [];
+      const purchaseCost = invOperations
+        .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+        .reduce((total, op) => total + (op.price * op.amount), 0);
+      const costBasis = (inv.originalAmount || 0) + purchaseCost;
+      return sum + costBasis;
+    }, 0);
+    const totalGain = totalCurrent - totalCostBasis;
+    const totalGainPercent = totalCostBasis > 0 ? ((totalGain / totalCostBasis) * 100) : 0;
+    
+    // Para dólar, calcular total de cantidad y total de inversión original
+    const totalAmount = investments.reduce((sum, inv) => sum + (inv.currentAmount || 0), 0);
+    const totalOriginalAmount = investments.reduce((sum, inv) => {
+      const invOperations = operations[inv.id] || [];
+      const purchaseCost = invOperations
+        .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+        .reduce((total, op) => total + (op.price * op.amount), 0);
+      return sum + (inv.originalAmount || 0) + purchaseCost;
+    }, 0);
+
     return (
       <Card key={typeName} title={typeLabel} className="mb-6">
         <div className="space-y-4">
-          {investments.map(inv => {
+          {/* Summary */}
+          {typeName === 'dolar' ? (
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Cantidad</p>
+                <p className="text-lg font-bold">{totalAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Inversión Original</p>
+                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalOriginalAmount, 'ARS', { sign: 'none' })}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Actual</p>
+                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCurrent, 'ARS', { sign: 'none' })}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Original</p>
+                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCostBasis, 'ARS', { sign: 'none' })}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia/Pérdida</p>
+                <p className={`text-lg font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatMoneyNoDecimals(totalGain, 'ARS')} ({totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%)
+                </p>
+              </div>
+            </div>
+          )}
+
+          {sortedInvestments.map(inv => {
             const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
             // Calcular costo total: inversión original + suma de precios de operaciones de compra
             const invOperations = operations[inv.id] || [];
@@ -158,32 +231,57 @@ export default function InvestmentHistory() {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-4 gap-4 mt-2 text-sm">
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">Cantidad Actual:</span>
-                        <span className="ml-2 font-semibold">
-                          {inv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                        </span>
+                    {typeName === 'dolar' ? (
+                      <div className="grid grid-cols-2 gap-4 mt-2 text-sm">
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400">Cantidad Actual:</span>
+                          <span className="ml-2 font-semibold">
+                            {inv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400">Entidad de Custodia:</span>
+                          <span className="ml-2 font-semibold">
+                            {inv.custodyEntity || '-'}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">Precio Actual:</span>
-                        <span className="ml-2 font-semibold">
-                          {inv.currentPrice ? formatMoneyNoDecimals(inv.currentPrice, 'ARS', { sign: 'none' }) : '-'}
-                        </span>
+                    ) : (
+                      <div className={`grid gap-4 mt-2 text-sm ${(typeName === 'crypto' || typeName === 'equity') ? 'grid-cols-5' : 'grid-cols-4'}`}>
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400">Cantidad Actual:</span>
+                          <span className="ml-2 font-semibold">
+                            {inv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400">Precio Actual:</span>
+                          <span className="ml-2 font-semibold">
+                            {inv.currentPrice ? formatMoneyNoDecimals(inv.currentPrice, 'ARS', { sign: 'none' }) : '-'}
+                          </span>
+                        </div>
+                        {(typeName === 'crypto' || typeName === 'equity') && (
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Valor de Mercado:</span>
+                            <span className="ml-2 font-semibold">
+                              {formatMoneyNoDecimals(currentValue, 'ARS', { sign: 'none' })}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400">Inversión Original:</span>
+                          <span className="ml-2 font-semibold">
+                            {formatMoneyNoDecimals(costBasis, 'ARS', { sign: 'none' })}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400">Ganancia/Pérdida:</span>
+                          <span className={`ml-2 font-semibold ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">Inversión Original:</span>
-                        <span className="ml-2 font-semibold">
-                          {formatMoneyNoDecimals(inv.originalAmount, 'ARS', { sign: 'none' })}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">Ganancia/Pérdida:</span>
-                        <span className={`ml-2 font-semibold ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -313,7 +411,7 @@ export default function InvestmentHistory() {
         <p className="text-center text-gray-500">Cargando...</p>
       ) : (
         <>
-          {renderInvestmentGroup('moneda', groupedInvestments.moneda)}
+          {renderInvestmentGroup('dolar', groupedInvestments.dolar)}
           {renderInvestmentGroup('equity', groupedInvestments.equity)}
           {renderInvestmentGroup('crypto', groupedInvestments.crypto)}
           

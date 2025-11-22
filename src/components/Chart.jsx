@@ -242,7 +242,7 @@ export function BarCompare({ data, showIncome = true, showExpenses = true, unitL
       {unitLabel && (
         <div className="absolute top-2 right-3 text-[10px] text-gray-500 dark:text-gray-400 select-none pointer-events-none">{unitLabel}</div>
       )}
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 8 }} onClick={onItemClick ? (e) => {
           if (!e) return;
           const label = e.activeLabel || (e?.activePayload && e.activePayload[0]?.payload?.name);

@@ -16,9 +16,15 @@ export default function Investment() {
   const [showOperationForm, setShowOperationForm] = useState(false);
   const [selectedInvestmentId, setSelectedInvestmentId] = useState(null);
   const [operations, setOperations] = useState([]);
+  const [availableSymbols, setAvailableSymbols] = useState([]);
+  const [showSymbolSuggestions, setShowSymbolSuggestions] = useState(false);
+  const [filteredSymbols, setFilteredSymbols] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [operationAmountError, setOperationAmountError] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [investmentToDelete, setInvestmentToDelete] = useState(null);
+  const [searchTimeout, setSearchTimeout] = useState(null);
   const [formData, setFormData] = useState({
     categoryId: '',
     concept: '',
@@ -37,9 +43,9 @@ export default function Investment() {
     date: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
   });
 
-  // Get investment categories (Moneda, Equity, Crypto)
+  // Get investment categories (Dolar, Equity, Crypto)
   const investmentCategories = useMemo(() => {
-    const investmentTypes = ['moneda', 'equity', 'crypto'];
+    const investmentTypes = ['dolar', 'equity', 'crypto'];
     const filtered = categories.filter(cat => 
       cat.type && investmentTypes.includes(cat.type.name.toLowerCase())
     );
@@ -56,14 +62,14 @@ export default function Investment() {
   // Group investments by category type
   const groupedInvestments = useMemo(() => {
     const groups = {
-      moneda: [],
+      dolar: [],
       equity: [],
       crypto: [],
     };
     
     investments.forEach(inv => {
       const typeName = inv.category?.type?.name?.toLowerCase() || '';
-      if (typeName === 'moneda') groups.moneda.push(inv);
+      if (typeName === 'dolar') groups.dolar.push(inv);
       else if (typeName === 'equity') groups.equity.push(inv);
       else if (typeName === 'crypto') groups.crypto.push(inv);
     });
@@ -123,8 +129,31 @@ export default function Investment() {
     }
   }, [investments.length]);
 
+  useEffect(() => {
+    if (showForm && formData.categoryId) {
+      const selectedCategory = investmentCategories.find(cat => cat.id === formData.categoryId);
+      console.log('Selected category:', selectedCategory);
+      if (selectedCategory) {
+        const typeName = selectedCategory.type.name.toLowerCase();
+        console.log('Category type name:', typeName);
+        if (typeName === 'crypto' || typeName === 'equity') {
+          console.log(`Loading symbols for ${typeName}`);
+          loadAvailableSymbols(typeName);
+        } else {
+          console.log(`Type ${typeName} does not need symbols, clearing`);
+          setAvailableSymbols([]);
+          setFilteredSymbols([]);
+        }
+      } else {
+        console.log('No category found for categoryId:', formData.categoryId);
+      }
+    } else {
+      console.log('Form not shown or no categoryId. showForm:', showForm, 'categoryId:', formData.categoryId);
+    }
+  }, [showForm, formData.categoryId, investmentCategories]);
+
   async function ensureInvestmentCategories() {
-    const investmentTypes = ['moneda', 'equity', 'crypto'];
+    const investmentTypes = ['dolar', 'equity', 'crypto'];
     for (const typeName of investmentTypes) {
       // Check if category exists with this type
       const existingCategory = categories.find(c => 
@@ -167,6 +196,32 @@ export default function Investment() {
     }
   }
 
+  async function loadAvailableSymbols(type, query = '') {
+    try {
+      console.log(`Loading available symbols for type: ${type}, query: ${query}`);
+      const symbols = await api.getAvailableSymbols(type, query);
+      console.log(`API returned symbols:`, symbols);
+      const symbolsArray = Array.isArray(symbols) ? symbols : [];
+      console.log(`Setting ${symbolsArray.length} symbols for type ${type}:`, symbolsArray);
+      
+      if (query) {
+        // Si hay query, estos son resultados de búsqueda, actualizar filteredSymbols
+        setFilteredSymbols(symbolsArray);
+        setShowSymbolSuggestions(symbolsArray.length > 0);
+      } else {
+        // Si no hay query, actualizar availableSymbols (símbolos de la base de datos)
+        setAvailableSymbols(symbolsArray);
+        setFilteredSymbols(symbolsArray);
+      }
+    } catch (error) {
+      console.error('Error loading available symbols:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      if (!query) {
+        setAvailableSymbols([]);
+        setFilteredSymbols([]);
+      }
+    }
+  }
 
   // Helper para convertir coma a punto para parseFloat
   function parseDecimal(value) {
@@ -185,6 +240,46 @@ export default function Investment() {
     // Para categoryId, concept, tag, custodyEntity y date, usar el valor directamente sin limpiar
     if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'custodyEntity' || field === 'date') {
       setFormData(prev => ({ ...prev, [field]: value }));
+      
+      // Si cambia el tipo de inversión, cargar símbolos disponibles
+      if (field === 'categoryId') {
+        const selectedCategory = investmentCategories.find(cat => cat.id === value);
+        if (selectedCategory) {
+          const typeName = selectedCategory.type.name.toLowerCase();
+          if (typeName === 'crypto' || typeName === 'equity') {
+            loadAvailableSymbols(typeName);
+          } else {
+            setAvailableSymbols([]);
+          }
+        }
+      }
+      
+      // Si cambia el concepto, buscar en la API con debounce
+      if (field === 'concept') {
+        const selectedCategory = investmentCategories.find(cat => cat.id === formData.categoryId);
+        const typeName = selectedCategory?.type?.name?.toLowerCase();
+        
+        // Limpiar timeout anterior
+        if (searchTimeout) {
+          clearTimeout(searchTimeout);
+        }
+        
+        if (value.length > 0 && (typeName === 'crypto' || typeName === 'equity')) {
+          // Mostrar sugerencias inmediatamente si hay texto
+          setShowSymbolSuggestions(true);
+          
+          // Buscar en la API con debounce (esperar 300ms después de que el usuario deje de escribir)
+          const timeout = setTimeout(() => {
+            loadAvailableSymbols(typeName, value);
+          }, 300);
+          setSearchTimeout(timeout);
+        } else if (value.length === 0) {
+          // Si no hay texto, ocultar sugerencias
+          setShowSymbolSuggestions(false);
+          setFilteredSymbols([]);
+        }
+      }
+      
       return;
     }
     // Para otros campos numéricos, permitir solo números, comas y puntos
@@ -212,17 +307,30 @@ export default function Investment() {
   async function handleSubmit(e) {
     e.preventDefault();
     
-    if (!formData.categoryId || !formData.concept || !formData.currentAmount || !formData.originalAmount || !formData.date) {
-      setToast({
-        message: 'Por favor completa todos los campos requeridos',
-        type: 'warning',
-      });
-      return;
+    const selectedCategory = investmentCategories.find(cat => cat.id === formData.categoryId);
+    const isDolar = selectedCategory?.type?.name?.toLowerCase() === 'dolar';
+    
+    // Validación diferente para dólares
+    if (isDolar) {
+      if (!formData.categoryId || !formData.currentAmount || !formData.date || !formData.custodyEntity) {
+        setToast({
+          message: 'Por favor completa todos los campos requeridos',
+          type: 'warning',
+        });
+        return;
+      }
+    } else {
+      if (!formData.categoryId || !formData.concept || !formData.currentAmount || !formData.originalAmount || !formData.date) {
+        setToast({
+          message: 'Por favor completa todos los campos requeridos',
+          type: 'warning',
+        });
+        return;
+      }
     }
 
     try {
       // Obtener el tipo de inversión para determinar si debemos obtener el precio automáticamente
-      const selectedCategory = investmentCategories.find(cat => cat.id === formData.categoryId);
       const typeName = selectedCategory?.type?.name?.toLowerCase();
       let currentPrice = formData.currentPrice ? parseDecimal(formData.currentPrice) : undefined;
 
@@ -239,13 +347,14 @@ export default function Investment() {
         }
       }
 
+      // Para dólares, establecer valores por defecto
       const payload = {
         categoryId: formData.categoryId,
-        concept: formData.concept.trim(),
+        concept: isDolar ? 'USD' : formData.concept.trim(),
         currentAmount: parseDecimal(formData.currentAmount),
         currentPrice: currentPrice,
-        originalAmount: parseDecimal(formData.originalAmount),
-        tag: formData.tag.trim() || undefined,
+        originalAmount: isDolar ? parseDecimal(formData.currentAmount) : parseDecimal(formData.originalAmount),
+        tag: isDolar ? undefined : (formData.tag.trim() || undefined),
         custodyEntity: formData.custodyEntity.trim() || undefined,
         date: formData.date,
       };
@@ -376,14 +485,76 @@ export default function Investment() {
     }
   }
 
+  function handleEdit(inv) {
+    setEditingId(inv.id);
+    setFormData({
+      categoryId: inv.categoryId,
+      concept: inv.concept || '',
+      currentAmount: formatDecimal(inv.currentAmount),
+      currentPrice: inv.currentPrice ? formatDecimal(inv.currentPrice) : '',
+      tag: inv.tag || '',
+      originalAmount: formatDecimal(inv.originalAmount),
+      custodyEntity: inv.custodyEntity || '',
+      date: inv.date ? new Date(inv.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    });
+    setShowForm(true);
+  }
+
+  function handleDeleteClick(inv) {
+    setInvestmentToDelete(inv);
+    setShowDeleteModal(true);
+  }
+
+  async function confirmDelete() {
+    if (!investmentToDelete) return;
+    
+    try {
+      await api.deleteInvestment(investmentToDelete.id);
+      setToast({
+        message: 'Inversión eliminada exitosamente',
+        type: 'success',
+      });
+      loadInvestments();
+      setShowDeleteModal(false);
+      setInvestmentToDelete(null);
+    } catch (error) {
+      console.error('Error deleting investment:', error);
+      setToast({
+        message: 'Error al eliminar la inversión',
+        type: 'error',
+      });
+    }
+  }
+
+  function cancelDelete() {
+    setShowDeleteModal(false);
+    setInvestmentToDelete(null);
+  }
+
   function renderInvestmentGroup(typeName, investments) {
     if (investments.length === 0) return null;
 
     const typeLabel = {
-      moneda: 'Moneda',
+      dolar: 'Dólar',
       equity: 'Equity',
       crypto: 'Crypto',
     }[typeName] || typeName;
+
+    // Ordenar por valor de mercado descendente para crypto y equity, por cantidad descendente para dólar
+    const sortedInvestments = [...investments];
+    if (typeName === 'crypto' || typeName === 'equity') {
+      sortedInvestments.sort((a, b) => {
+        const valueA = (a.currentAmount || 0) * (a.currentPrice || 0);
+        const valueB = (b.currentAmount || 0) * (b.currentPrice || 0);
+        return valueB - valueA;
+      });
+    } else if (typeName === 'dolar') {
+      sortedInvestments.sort((a, b) => {
+        const amountA = a.currentAmount || 0;
+        const amountB = b.currentAmount || 0;
+        return amountB - amountA;
+      });
+    }
 
     const totalCurrent = investments.reduce((sum, inv) => {
       const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
@@ -400,27 +571,50 @@ export default function Investment() {
     }, 0);
     const totalGain = totalCurrent - totalCostBasis;
     const totalGainPercent = totalCostBasis > 0 ? ((totalGain / totalCostBasis) * 100) : 0;
+    
+    // Para dólar, calcular total de cantidad y total de inversión original
+    const totalAmount = investments.reduce((sum, inv) => sum + (inv.currentAmount || 0), 0);
+    const totalOriginalAmount = investments.reduce((sum, inv) => {
+      const invOperations = operations.filter(op => op.investmentId === inv.id);
+      const purchaseCost = invOperations
+        .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+        .reduce((total, op) => total + (op.price * op.amount), 0);
+      return sum + (inv.originalAmount || 0) + purchaseCost;
+    }, 0);
 
     return (
       <Card key={typeName} title={typeLabel} className="mb-6">
         <div className="space-y-4">
           {/* Summary */}
-          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Actual</p>
-              <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCurrent, 'ARS', { sign: 'none' })}</p>
+          {typeName === 'dolar' ? (
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Cantidad</p>
+                <p className="text-lg font-bold">{totalAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Inversión Original</p>
+                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalOriginalAmount, 'ARS', { sign: 'none' })}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Original</p>
-              <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCostBasis, 'ARS', { sign: 'none' })}</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Actual</p>
+                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCurrent, 'ARS', { sign: 'none' })}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Original</p>
+                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCostBasis, 'ARS', { sign: 'none' })}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia/Pérdida</p>
+                <p className={`text-lg font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatMoneyNoDecimals(totalGain, 'ARS')} ({totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%)
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia/Pérdida</p>
-              <p className={`text-lg font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatMoneyNoDecimals(totalGain, 'ARS')} ({totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%)
-              </p>
-            </div>
-          </div>
+          )}
 
           {/* Table */}
           <div className="overflow-x-auto">
@@ -429,16 +623,27 @@ export default function Investment() {
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left py-2 px-3 text-sm font-semibold">Concepto</th>
                   <th className="text-right py-2 px-3 text-sm font-semibold">Cantidad Actual</th>
-                  <th className="text-right py-2 px-3 text-sm font-semibold">Precio Actual</th>
-                  <th className="text-right py-2 px-3 text-sm font-semibold">Inversión Original</th>
-                  <th className="text-right py-2 px-3 text-sm font-semibold">Ganancia/Pérdida</th>
-                  <th className="text-left py-2 px-3 text-sm font-semibold">Tag</th>
+                  {typeName !== 'dolar' && (
+                    <th className="text-right py-2 px-3 text-sm font-semibold">Precio Actual</th>
+                  )}
+                  {(typeName === 'crypto' || typeName === 'equity') && (
+                    <th className="text-right py-2 px-3 text-sm font-semibold">Valor de Mercado</th>
+                  )}
+                  {typeName !== 'dolar' && (
+                    <th className="text-right py-2 px-3 text-sm font-semibold">Inversión Original</th>
+                  )}
+                  {typeName !== 'dolar' && (
+                    <th className="text-right py-2 px-3 text-sm font-semibold">Ganancia/Pérdida</th>
+                  )}
+                  {typeName !== 'dolar' && (
+                    <th className="text-left py-2 px-3 text-sm font-semibold">Tag</th>
+                  )}
                   <th className="text-left py-2 px-3 text-sm font-semibold">Entidad de Custodia</th>
                   <th className="text-center py-2 px-3 text-sm font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {investments.map(inv => {
+                {sortedInvestments.map(inv => {
                   const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
                   // Calcular costo total: inversión original + suma de precios de operaciones de compra
                   const invOperations = operations.filter(op => op.investmentId === inv.id);
@@ -453,23 +658,55 @@ export default function Investment() {
                       <tr className="border-b border-gray-100 dark:border-gray-800">
                         <td className="py-2 px-3">{inv.concept}</td>
                         <td className="text-right py-2 px-3">{inv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                        <td className="text-right py-2 px-3">{inv.currentPrice ? formatMoneyNoDecimals(inv.currentPrice, 'ARS', { sign: 'none' }) : '-'}</td>
-                        <td className="text-right py-2 px-3">
-                          {formatMoneyNoDecimals(costBasis, 'ARS', { sign: 'none' })}
-                        </td>
-                        <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
-                        </td>
-                        <td className="py-2 px-3">{inv.tag || '-'}</td>
+                        {typeName !== 'dolar' && (
+                          <td className="text-right py-2 px-3">{inv.currentPrice ? formatMoneyNoDecimals(inv.currentPrice, 'ARS', { sign: 'none' }) : '-'}</td>
+                        )}
+                        {(typeName === 'crypto' || typeName === 'equity') && (
+                          <td className="text-right py-2 px-3 font-semibold">
+                            {formatMoneyNoDecimals(currentValue, 'ARS', { sign: 'none' })}
+                          </td>
+                        )}
+                        {typeName !== 'dolar' && (
+                          <td className="text-right py-2 px-3">
+                            {formatMoneyNoDecimals(costBasis, 'ARS', { sign: 'none' })}
+                          </td>
+                        )}
+                        {typeName !== 'dolar' && (
+                          <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
+                          </td>
+                        )}
+                        {typeName !== 'dolar' && (
+                          <td className="py-2 px-3">{inv.tag || '-'}</td>
+                        )}
                         <td className="py-2 px-3">{inv.custodyEntity || '-'}</td>
-                      <td className="text-center py-2 px-3">
-                        <button
-                          onClick={() => handleAddOperation(inv)}
-                          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                        >
-                          Agregar Operación
-                        </button>
-                      </td>
+                        <td className="text-center py-2 px-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleEdit(inv)}
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
+                              title="Editar"
+                            >
+                              Editar
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
+                              onClick={() => handleDeleteClick(inv)}
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm"
+                              title="Eliminar"
+                            >
+                              Eliminar
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
+                              onClick={() => handleAddOperation(inv)}
+                              className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-sm"
+                              title="Agregar Operación"
+                            >
+                              Operación
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     </React.Fragment>
                   );
@@ -487,7 +724,7 @@ export default function Investment() {
       <header className="flex items-center justify-between">
         <div>
           <p className="text-4xl font-black tracking-[-0.033em]">Inversiones</p>
-          <p className="text-[#616f89] dark:text-gray-400">Gestiona tus inversiones en Moneda, Equity y Crypto</p>
+          <p className="text-[#616f89] dark:text-gray-400">Gestiona tus inversiones en Dólar, Equity y Crypto</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -514,96 +751,176 @@ export default function Investment() {
         </div>
       </header>
 
-      {showForm && (
-        <Card title={editingId ? 'Editar Inversión' : 'Nueva Inversión'}>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Tipo de Inversión *</label>
-              <CustomSelect
-                value={formData.categoryId || ''}
-                onChange={(v) => handleFormChange('categoryId', v)}
-                options={[
-                  { value: '', label: 'Selecciona un tipo' },
-                  ...investmentCategories.map(cat => ({
-                    value: cat.id,
-                    label: capitalizeWords(cat.type.name)
-                  }))
-                ]}
-                className="w-full"
-                buttonClassName="w-full"
-              />
-            </div>
+      {showForm && (() => {
+        const selectedCategory = investmentCategories.find(cat => cat.id === formData.categoryId);
+        const isDolar = selectedCategory?.type?.name?.toLowerCase() === 'dolar';
+        
+        return (
+          <Card title={editingId ? 'Editar Inversión' : 'Nueva Inversión'}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Tipo de Inversión *</label>
+                <CustomSelect
+                  value={formData.categoryId || ''}
+                  onChange={(v) => handleFormChange('categoryId', v)}
+                  options={[
+                    { value: '', label: 'Selecciona un tipo' },
+                    ...investmentCategories.map(cat => ({
+                      value: cat.id,
+                      label: capitalizeWords(cat.type.name)
+                    }))
+                  ]}
+                  className="w-full"
+                  buttonClassName="w-full"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Concepto *</label>
-              <input
-                type="text"
-                value={formData.concept}
-                onChange={(e) => handleFormChange('concept', e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Ej: BTC, USD, AAPL"
-                required
-              />
-            </div>
+              {!isDolar && (
+                <div className="relative">
+                  <label className="block text-sm font-medium mb-1">Concepto *</label>
+                  <input
+                    type="text"
+                    value={formData.concept}
+                    onChange={(e) => handleFormChange('concept', e.target.value)}
+                    onFocus={() => {
+                      // Mostrar sugerencias si hay texto o si hay símbolos disponibles
+                      if (formData.concept && formData.concept.length > 0) {
+                        if (filteredSymbols.length > 0) {
+                          setShowSymbolSuggestions(true);
+                        } else if (availableSymbols.length > 0) {
+                          // Si no hay filtrados pero hay símbolos disponibles, mostrar todos
+                          setFilteredSymbols(availableSymbols);
+                          setShowSymbolSuggestions(true);
+                        }
+                      } else if (availableSymbols.length > 0) {
+                        // Si no hay texto pero hay símbolos, mostrar todos
+                        setFilteredSymbols(availableSymbols);
+                        setShowSymbolSuggestions(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay para permitir click en sugerencias
+                      setTimeout(() => setShowSymbolSuggestions(false), 200);
+                    }}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: BTC, USD, AAPL"
+                    required={!isDolar}
+                  />
+                  {showSymbolSuggestions && filteredSymbols.length > 0 && (
+                    <div 
+                      className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                      onMouseDown={(e) => {
+                        // Prevenir que el blur del input oculte el menú
+                        e.preventDefault();
+                      }}
+                    >
+                      {filteredSymbols.slice(0, 10).map((symbol) => (
+                        <div
+                          key={symbol}
+                          className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleFormChange('concept', symbol);
+                            setShowSymbolSuggestions(false);
+                          }}
+                        >
+                          {symbol}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {formData.concept && formData.concept.length > 0 && availableSymbols.length === 0 && !showSymbolSuggestions && (
+                    <div className="absolute z-50 w-full mt-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg shadow-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+                      <p>No hay símbolos disponibles. Los símbolos aparecerán cuando:</p>
+                      <ul className="list-disc list-inside mt-1 space-y-1">
+                        <li>Crear inversiones de tipo {selectedCategory?.type?.name || 'Crypto/Equity'}</li>
+                        <li>Actualizar precios desde la API</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Cantidad Actual *</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={formData.currentAmount}
-                onChange={(e) => handleFormChange('currentAmount', e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Ej: 1,5"
-                required
-              />
-            </div>
+              {!isDolar && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Cantidad Actual *</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={formData.currentAmount}
+                    onChange={(e) => handleFormChange('currentAmount', e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: 1,5"
+                    required={!isDolar}
+                  />
+                </div>
+              )}
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Inversión Original *</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={formData.originalAmount}
-                onChange={(e) => handleFormChange('originalAmount', e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Ej: 50000,25"
-                required
-              />
-            </div>
+              {isDolar && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Cantidad *</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={formData.currentAmount}
+                    onChange={(e) => handleFormChange('currentAmount', e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: 1000"
+                    required
+                  />
+                </div>
+              )}
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Fecha *</label>
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => handleFormChange('date', e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                required
-              />
-            </div>
+              {!isDolar && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Inversión Original *</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={formData.originalAmount}
+                    onChange={(e) => handleFormChange('originalAmount', e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: 50000,25"
+                    required={!isDolar}
+                  />
+                </div>
+              )}
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Tag</label>
-              <input
-                type="text"
-                value={formData.tag}
-                onChange={(e) => handleFormChange('tag', e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Opcional"
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Fecha *</label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => handleFormChange('date', e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Entidad de Custodia</label>
-              <input
-                type="text"
-                value={formData.custodyEntity}
-                onChange={(e) => handleFormChange('custodyEntity', e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Ej: Binance, IOL, etc."
-              />
-            </div>
+              {!isDolar && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Tag</label>
+                  <input
+                    type="text"
+                    value={formData.tag}
+                    onChange={(e) => handleFormChange('tag', e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Opcional"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Entidad de Custodia{isDolar ? ' *' : ''}</label>
+                <input
+                  type="text"
+                  value={formData.custodyEntity}
+                  onChange={(e) => handleFormChange('custodyEntity', e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Ej: Binance, IOL, etc."
+                  required={isDolar}
+                />
+              </div>
 
             <div className="flex gap-2">
               <button
@@ -622,7 +939,8 @@ export default function Investment() {
             </div>
           </form>
         </Card>
-      )}
+        );
+      })()}
 
       {showOperationForm && (
         <Card title="Agregar Operación">
@@ -669,7 +987,7 @@ export default function Investment() {
                           }
                         }
                       } else if (selectedInv.currentPrice) {
-                        // Para moneda, usar el precio actual si existe
+                        // Para dólar, usar el precio actual si existe
                         setOperationData(prev => ({ 
                           ...prev, 
                           price: formatDecimal(selectedInv.currentPrice)
@@ -801,7 +1119,7 @@ export default function Investment() {
         <p className="text-center text-gray-500">Cargando...</p>
       ) : (
         <>
-          {renderInvestmentGroup('moneda', groupedInvestments.moneda)}
+          {renderInvestmentGroup('dolar', groupedInvestments.dolar)}
           {renderInvestmentGroup('equity', groupedInvestments.equity)}
           {renderInvestmentGroup('crypto', groupedInvestments.crypto)}
           
@@ -811,6 +1129,39 @@ export default function Investment() {
             </Card>
           )}
         </>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && investmentToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={cancelDelete}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">
+                Confirmar Eliminación
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                ¿Estás seguro de que deseas eliminar la inversión <span className="font-semibold text-gray-900 dark:text-gray-100">"{investmentToDelete.concept}"</span>?
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mb-6">
+                Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={cancelDelete}
+                  className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="h-9 px-4 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (

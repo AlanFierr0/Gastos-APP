@@ -165,6 +165,19 @@ export async function getPrice(symbol) {
   }
 }
 
+export async function getAvailableSymbols(type, query) {
+  try {
+    const url = query 
+      ? `/prices/symbols/${type}?query=${encodeURIComponent(query)}`
+      : `/prices/symbols/${type}`;
+    const { data } = await http.get(url);
+    return data || [];
+  } catch (error) {
+    console.error(`Error getting available symbols for ${type}:`, error);
+    return [];
+  }
+}
+
 export async function getInvestmentOperations(investmentId) {
   const params = investmentId ? { investmentId } : {};
   const { data } = await http.get('/investment-operations', { params });
