@@ -148,9 +148,10 @@ function useFAConfig(categories) {
   };
 
   const allCategoryNames = React.useMemo(() => {
+    const excludedCategories = ['general', 'crypto', 'dolar', 'equity'];
     return (categories || [])
       .map(c => String(c.name || '').trim().toLowerCase())
-      .filter(n => n !== 'general'); // Exclude "general" category
+      .filter(n => !excludedCategories.includes(n)); // Exclude "general", "crypto", "dolar", and "equity" categories
   }, [categories]);
 
   // Ensure config only keeps categories that exist (guard against renames)
@@ -187,19 +188,6 @@ function useFAConfig(categories) {
   return { config, toggle, setTarget, formatTargetValue, loading, autoCompleteThirdBucket };
 }
 
-function isForecastMonth(year, month) {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
-  
-  // If year is in the future, it's forecast
-  if (year > currentYear) return true;
-  // If year is in the past, it's not forecast
-  if (year < currentYear) return false;
-  // If same year, month >= current month is forecast
-  return month >= currentMonth;
-}
-
 function buildYearlyPercents(expenses, config) {
   // Build totals per year
   const yearTotals = new Map();
@@ -214,18 +202,21 @@ function buildYearlyPercents(expenses, config) {
     });
   }
 
+  // Categories to exclude from financial analysis
+  const excludedCategories = ['crypto', 'dolar', 'equity'];
+  
   for (const e of (expenses || [])) {
     const d = new Date(e.date);
     if (Number.isNaN(d.getTime())) continue;
     const year = d.getUTCFullYear();
-    const month = d.getUTCMonth() + 1; // getUTCMonth() returns 0-11
     
-    // Exclude forecast months
-    if (isForecastMonth(year, month)) continue;
-    
+    // Include all data, including forecast months
     const amount = Number(e.amount || 0);
     const cat = (typeof e.category === 'object' && e.category) ? (e.category.name || '') : (e.category || '');
     const lowerCat = String(cat).trim().toLowerCase();
+    
+    // Exclude crypto, dolar, and equity categories
+    if (excludedCategories.includes(lowerCat)) continue;
 
     yearTotals.set(year, (yearTotals.get(year) || 0) + amount);
     const buckets = yearBucket.get(year) || { fixed: 0, wellbeing: 0, saving: 0 };
@@ -306,12 +297,13 @@ export default function FinancialAnalysis() {
     });
 
     // Filter categories: show only if not selected in other buckets, or already selected in current bucket
-    // Also filter out "General" category
+    // Also filter out "General", "crypto", "dolar", and "equity" categories
+    const excludedCategories = ['general', 'crypto', 'dolar', 'equity'];
     return (categories || [])
       .filter((c) => {
         const lower = String(c.name || '').trim().toLowerCase();
-        // Filter out "general" category
-        if (lower === 'general') return false;
+        // Filter out excluded categories
+        if (excludedCategories.includes(lower)) return false;
         const isInCurrent = (config[bucket] || []).includes(lower);
         const isInOthers = selectedInOthers.has(lower);
         // Show if it's in current bucket OR not in any other bucket

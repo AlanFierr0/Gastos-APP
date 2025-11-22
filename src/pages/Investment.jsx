@@ -34,7 +34,10 @@ export default function Investment() {
     originalAmount: '',
     custodyEntity: '',
     date: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
+    x100: false,
+    gbp: false,
   });
+  const [gbpPrice, setGbpPrice] = useState(null);
   const [operationData, setOperationData] = useState({
     type: 'COMPRA',
     amount: '',
@@ -97,7 +100,37 @@ export default function Investment() {
     loadInvestments().then(() => {
       updatePricesSilently();
     });
+    // Cargar precio de GBP
+    loadGbpPrice();
   }, []);
+
+  async function loadGbpPrice() {
+    try {
+      // Intentar con diferentes símbolos posibles
+      let price = await api.getPrice('GBPUSD=X');
+      
+      // Si no funciona, intentar sin el =X
+      if (!price || price <= 0) {
+        price = await api.getPrice('GBPUSD');
+      }
+      
+      // Si aún no funciona, intentar con otro formato
+      if (!price || price <= 0) {
+        price = await api.getPrice('GBP=X');
+      }
+      
+      if (price && price > 0) {
+        setGbpPrice(price);
+      } else {
+        console.warn('GBP price not available from API');
+        // No reintentar infinitamente, solo mostrar "No disponible"
+        setGbpPrice(null);
+      }
+    } catch (error) {
+      console.error('Error loading GBP price:', error);
+      setGbpPrice(null);
+    }
+  }
 
   // Efecto separado para manejar la apertura de formularios desde el Dashboard
   useEffect(() => {
@@ -237,6 +270,11 @@ export default function Investment() {
   }
 
   function handleFormChange(field, value) {
+    // Para campos booleanos (x100, gbp), usar el valor directamente
+    if (field === 'x100' || field === 'gbp') {
+      setFormData(prev => ({ ...prev, [field]: value }));
+      return;
+    }
     // Para categoryId, concept, tag, custodyEntity y date, usar el valor directamente sin limpiar
     if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'custodyEntity' || field === 'date') {
       setFormData(prev => ({ ...prev, [field]: value }));
@@ -299,6 +337,8 @@ export default function Investment() {
       originalAmount: '',
       custodyEntity: '',
       date: new Date().toISOString().split('T')[0],
+      x100: false,
+      gbp: false,
     });
     setEditingId(null);
     setShowForm(false);
@@ -348,6 +388,8 @@ export default function Investment() {
       }
 
       // Para dólares, establecer valores por defecto
+      const isEquity = selectedCategory?.type?.name?.toLowerCase() === 'equity';
+      
       const payload = {
         categoryId: formData.categoryId,
         concept: isDolar ? 'USD' : formData.concept.trim(),
@@ -357,6 +399,8 @@ export default function Investment() {
         tag: isDolar ? undefined : (formData.tag.trim() || undefined),
         custodyEntity: formData.custodyEntity.trim() || undefined,
         date: formData.date,
+        x100: isEquity ? formData.x100 : undefined,
+        gbp: isEquity ? formData.gbp : undefined,
       };
 
       if (editingId) {
@@ -496,6 +540,8 @@ export default function Investment() {
       originalAmount: formatDecimal(inv.originalAmount),
       custodyEntity: inv.custodyEntity || '',
       date: inv.date ? new Date(inv.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      x100: inv.x100 || false,
+      gbp: inv.gbp || false,
     });
     setShowForm(true);
   }
@@ -544,8 +590,17 @@ export default function Investment() {
     const sortedInvestments = [...investments];
     if (typeName === 'crypto' || typeName === 'equity') {
       sortedInvestments.sort((a, b) => {
-        const valueA = (a.currentAmount || 0) * (a.currentPrice || 0);
-        const valueB = (b.currentAmount || 0) * (b.currentPrice || 0);
+        // Aplicar lógica X100 y GBP para ordenar
+        let priceA = a.currentPrice || 0;
+        let priceB = b.currentPrice || 0;
+        if (typeName === 'equity') {
+          if (a.x100) priceA = priceA / 100;
+          if (b.x100) priceB = priceB / 100;
+          if (a.gbp && gbpPrice) priceA = priceA * gbpPrice;
+          if (b.gbp && gbpPrice) priceB = priceB * gbpPrice;
+        }
+        const valueA = (a.currentAmount || 0) * priceA;
+        const valueB = (b.currentAmount || 0) * priceB;
         return valueB - valueA;
       });
     } else if (typeName === 'dolar') {
@@ -557,16 +612,32 @@ export default function Investment() {
     }
 
     const totalCurrent = investments.reduce((sum, inv) => {
-      const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
+      let price = inv.currentPrice || 0;
+      if (typeName === 'equity') {
+        if (inv.x100) price = price / 100;
+        if (inv.gbp && gbpPrice) price = price * gbpPrice;
+      }
+      const currentValue = (inv.currentAmount || 0) * price;
       return sum + currentValue;
     }, 0);
     const totalCostBasis = investments.reduce((sum, inv) => {
       // Calcular costo total: inversión original + suma de precios de operaciones de compra
       const invOperations = operations.filter(op => op.investmentId === inv.id);
+      let originalAmount = inv.originalAmount || 0;
+      if (typeName === 'equity' && inv.gbp && gbpPrice) {
+        originalAmount = originalAmount * gbpPrice;
+      }
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
-        .reduce((total, op) => total + (op.price * op.amount), 0);
-      const costBasis = (inv.originalAmount || 0) + purchaseCost;
+        .reduce((total, op) => {
+          let opPrice = op.price;
+          if (typeName === 'equity') {
+            if (inv.x100) opPrice = opPrice / 100;
+            if (inv.gbp && gbpPrice) opPrice = opPrice * gbpPrice;
+          }
+          return total + (opPrice * op.amount);
+        }, 0);
+      const costBasis = originalAmount + purchaseCost;
       return sum + costBasis;
     }, 0);
     const totalGain = totalCurrent - totalCostBasis;
@@ -576,10 +647,21 @@ export default function Investment() {
     const totalAmount = investments.reduce((sum, inv) => sum + (inv.currentAmount || 0), 0);
     const totalOriginalAmount = investments.reduce((sum, inv) => {
       const invOperations = operations.filter(op => op.investmentId === inv.id);
+      let originalAmount = inv.originalAmount || 0;
+      if (typeName === 'equity' && inv.gbp && gbpPrice) {
+        originalAmount = originalAmount * gbpPrice;
+      }
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
-        .reduce((total, op) => total + (op.price * op.amount), 0);
-      return sum + (inv.originalAmount || 0) + purchaseCost;
+        .reduce((total, op) => {
+          let opPrice = op.price;
+          if (typeName === 'equity') {
+            if (inv.x100) opPrice = opPrice / 100;
+            if (inv.gbp && gbpPrice) opPrice = opPrice * gbpPrice;
+          }
+          return total + (opPrice * op.amount);
+        }, 0);
+      return sum + originalAmount + purchaseCost;
     }, 0);
 
     return (
@@ -644,22 +726,50 @@ export default function Investment() {
               </thead>
               <tbody>
                 {sortedInvestments.map(inv => {
-                  const currentValue = (inv.currentAmount || 0) * (inv.currentPrice || 0);
+                  // Aplicar lógica X100 y GBP para equity
+                  let displayPrice = inv.currentPrice || 0;
+                  let displayAmount = inv.currentAmount || 0;
+                  let displayOriginalAmount = inv.originalAmount || 0;
+                  
+                  if (typeName === 'equity') {
+                    // Aplicar X100: dividir precio por 100
+                    if (inv.x100) {
+                      displayPrice = displayPrice / 100;
+                    }
+                    
+                    // Aplicar GBP: convertir a dólares
+                    if (inv.gbp && gbpPrice) {
+                      displayPrice = displayPrice * gbpPrice;
+                      displayOriginalAmount = displayOriginalAmount * gbpPrice;
+                    }
+                  }
+                  
+                  const currentValue = displayAmount * displayPrice;
                   // Calcular costo total: inversión original + suma de precios de operaciones de compra
                   const invOperations = operations.filter(op => op.investmentId === inv.id);
                   const purchaseCost = invOperations
                     .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
-                    .reduce((total, op) => total + (op.price * op.amount), 0);
-                  const costBasis = (inv.originalAmount || 0) + purchaseCost;
+                    .reduce((total, op) => {
+                      let opPrice = op.price;
+                      // Aplicar misma lógica a precios de operaciones
+                      if (typeName === 'equity' && inv.x100) {
+                        opPrice = opPrice / 100;
+                      }
+                      if (typeName === 'equity' && inv.gbp && gbpPrice) {
+                        opPrice = opPrice * gbpPrice;
+                      }
+                      return total + (opPrice * op.amount);
+                    }, 0);
+                  const costBasis = displayOriginalAmount + purchaseCost;
                   const gain = currentValue - costBasis;
                   const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
                   return (
                     <React.Fragment key={inv.id}>
                       <tr className="border-b border-gray-100 dark:border-gray-800">
                         <td className="py-2 px-3">{inv.concept}</td>
-                        <td className="text-right py-2 px-3">{inv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                        <td className="text-right py-2 px-3">{displayAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
                         {typeName !== 'dolar' && (
-                          <td className="text-right py-2 px-3">{inv.currentPrice ? formatMoneyNoDecimals(inv.currentPrice, 'ARS', { sign: 'none' }) : '-'}</td>
+                          <td className="text-right py-2 px-3">{displayPrice > 0 ? formatMoneyNoDecimals(displayPrice, 'ARS', { sign: 'none' }) : '-'}</td>
                         )}
                         {(typeName === 'crypto' || typeName === 'equity') && (
                           <td className="text-right py-2 px-3 font-semibold">
@@ -726,28 +836,36 @@ export default function Investment() {
           <p className="text-4xl font-black tracking-[-0.033em]">Inversiones</p>
           <p className="text-[#616f89] dark:text-gray-400">Gestiona tus inversiones en Dólar, Equity y Crypto</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setSelectedInvestmentId(null);
-              setOperationData({
-                type: 'COMPRA',
-                amount: '',
-                price: '',
-                note: '',
-              });
-              setShowOperationForm(true);
-            }}
-            className="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
-          >
-            Agregar Operación
-          </button>
-          <button
-            onClick={() => setShowForm(true)}
-            className="h-9 px-4 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
-          >
-            Agregar Inversión
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-gray-500 dark:text-gray-400">GBP/USD</p>
+            <p className="text-sm font-semibold">
+              {gbpPrice ? gbpPrice.toFixed(4) : 'N/A'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSelectedInvestmentId(null);
+                setOperationData({
+                  type: 'COMPRA',
+                  amount: '',
+                  price: '',
+                  note: '',
+                });
+                setShowOperationForm(true);
+              }}
+              className="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+            >
+              Agregar Operación
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="h-9 px-4 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+            >
+              Agregar Inversión
+            </button>
+          </div>
         </div>
       </header>
 
@@ -922,22 +1040,51 @@ export default function Investment() {
                 />
               </div>
 
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
-              >
-                {editingId ? 'Actualizar' : 'Guardar'}
-              </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
+              {selectedCategory?.type?.name?.toLowerCase() === 'equity' && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="x100"
+                      checked={formData.x100}
+                      onChange={(e) => handleFormChange('x100', e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-primary focus:ring-primary"
+                    />
+                    <label htmlFor="x100" className="text-sm font-medium cursor-pointer">
+                      X100: Dividir precio actual por 100
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="gbp"
+                      checked={formData.gbp}
+                      onChange={(e) => handleFormChange('gbp', e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-primary focus:ring-primary"
+                    />
+                    <label htmlFor="gbp" className="text-sm font-medium cursor-pointer">
+                      GBP: Convertir valores a dólares usando libra esterlina
+                    </label>
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
+                >
+                  {editingId ? 'Actualizar' : 'Guardar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
         </Card>
         );
       })()}
