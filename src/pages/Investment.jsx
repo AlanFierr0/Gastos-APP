@@ -80,6 +80,37 @@ export default function Investment() {
     return groups;
   }, [investments]);
 
+  // Calculate total value for each category and sort them
+  const sortedCategories = useMemo(() => {
+    const categories = [
+      { type: 'dolar', investments: groupedInvestments.dolar },
+      { type: 'equity', investments: groupedInvestments.equity },
+      { type: 'crypto', investments: groupedInvestments.crypto },
+    ];
+
+    return categories.map(cat => {
+      let totalValue = 0;
+      
+      if (cat.type === 'dolar') {
+        // Para dólar, el valor es la cantidad directamente
+        totalValue = cat.investments.reduce((sum, inv) => sum + (inv.currentAmount || 0), 0);
+      } else {
+        // Para crypto y equity, calcular valor de mercado
+        totalValue = cat.investments.reduce((sum, inv) => {
+          let price = inv.currentPrice || 0;
+          if (cat.type === 'equity') {
+            if (inv.x100) price = price / 100;
+            if (inv.gbp && gbpPrice) price = price * gbpPrice;
+          }
+          const currentValue = (inv.currentAmount || 0) * price;
+          return sum + currentValue;
+        }, 0);
+      }
+      
+      return { ...cat, totalValue };
+    }).sort((a, b) => b.totalValue - a.totalValue);
+  }, [groupedInvestments, gbpPrice]);
+
   async function updatePricesSilently() {
     try {
       // Primero actualizar los precios desde las APIs
@@ -1266,9 +1297,9 @@ export default function Investment() {
         <p className="text-center text-gray-500">Cargando...</p>
       ) : (
         <>
-          {renderInvestmentGroup('dolar', groupedInvestments.dolar)}
-          {renderInvestmentGroup('equity', groupedInvestments.equity)}
-          {renderInvestmentGroup('crypto', groupedInvestments.crypto)}
+          {sortedCategories.map(cat => 
+            renderInvestmentGroup(cat.type, cat.investments)
+          )}
           
           {investments.length === 0 && (
             <Card>

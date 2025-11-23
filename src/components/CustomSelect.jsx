@@ -9,13 +9,20 @@ export default function CustomSelect({ value, onChange, options = [], className 
 
   useEffect(() => {
     if (isOpen && buttonRef.current) {
+      // Function to update dropdown position
+      const updatePosition = () => {
+        if (buttonRef.current) {
+          const rect = buttonRef.current.getBoundingClientRect();
+          setDropdownPosition({
+            top: rect.bottom + 4, // Use viewport-relative position (no scrollY)
+            left: rect.left, // Use viewport-relative position (no scrollX)
+            width: rect.width
+          });
+        }
+      };
+
       // Calculate position when opening
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width
-      });
+      updatePosition();
 
       const handleClickOutside = (event) => {
         const dropdown = document.querySelector('[data-custom-select-dropdown]');
@@ -27,16 +34,25 @@ export default function CustomSelect({ value, onChange, options = [], className 
         }
       };
 
+      // Update position on scroll to keep dropdown aligned with button
+      const handleScroll = () => {
+        updatePosition();
+      };
+
       // Use a small delay to avoid closing immediately when opening
       const timeoutId = setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('click', handleClickOutside);
+        window.addEventListener('scroll', handleScroll, true); // Use capture phase to catch all scroll events
+        window.addEventListener('resize', updatePosition);
       }, 100);
 
       return () => {
         clearTimeout(timeoutId);
         document.removeEventListener('mousedown', handleClickOutside);
         document.removeEventListener('click', handleClickOutside);
+        window.removeEventListener('scroll', handleScroll, true);
+        window.removeEventListener('resize', updatePosition);
       };
     }
   }, [isOpen]);

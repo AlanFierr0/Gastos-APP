@@ -56,6 +56,44 @@ export async function confirmImport(records, expenseTypeMap = {}) {
   return data;
 }
 
+export async function loadMonthlySummary(summary, file) {
+  if (file) {
+    // Si hay archivo, enviarlo como FormData
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await http.post('/upload/monthly-summary', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  } else {
+    // Si no hay archivo, enviar texto en el body
+    const { data } = await http.post('/upload/monthly-summary', { summary });
+    return data;
+  }
+}
+
+export async function getMonthlySummarySections(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await http.post('/upload/monthly-summary/sections', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function processMonthlySummarySection(sectionContent, sectionTitle) {
+  try {
+    const { data } = await http.post('/upload/monthly-summary/process-section', {
+      sectionContent,
+      sectionTitle,
+    });
+    return data;
+  } catch (error) {
+    // Re-lanzar el error para que el frontend pueda manejarlo
+    throw error;
+  }
+}
+
 export async function getExchangeRates() {
   try {
     const { data } = await http.get('/exchange-rates');
