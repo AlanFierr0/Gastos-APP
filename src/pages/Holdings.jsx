@@ -121,13 +121,41 @@ export default function Holdings() {
   }
 
   useEffect(() => {
-    loadPersons();
-    loadGbpPrice();
+    // Actualizar precios primero, luego cargar personas
+    async function updateAndLoad() {
+      try {
+        // Primero actualizar los precios desde las APIs
+        await api.updatePrices();
+        // Luego actualizar los precios de las tenencias
+        await api.updateHoldingPrices();
+      } catch (error) {
+        console.error('Error updating prices silently:', error);
+        // Continuar aunque falle la actualización
+      }
+      // Cargar personas y precio de GBP
+      loadPersons();
+      loadGbpPrice();
+    }
+    updateAndLoad();
   }, []);
 
   useEffect(() => {
     if (selectedPersonId) {
-      loadHoldings(selectedPersonId);
+      // Actualizar precios antes de cargar holdings
+      async function updateAndLoad() {
+        try {
+          // Actualizar los precios desde las APIs
+          await api.updatePrices();
+          // Actualizar los precios de las tenencias
+          await api.updateHoldingPrices();
+        } catch (error) {
+          console.error('Error updating prices silently:', error);
+          // Continuar aunque falle la actualización
+        }
+        // Cargar holdings después de actualizar precios
+        loadHoldings(selectedPersonId);
+      }
+      updateAndLoad();
     } else {
       setHoldings([]);
     }
@@ -408,13 +436,38 @@ export default function Holdings() {
 
       const isEquity = selectedCategory?.type?.name?.toLowerCase() === 'equity';
       
+      // Apply transformations before sending to backend
+      // If X100: divide price by 100
+      // If GBP: convert from GBP to USD (divide by GBP/USD rate)
+      // Backend will save exactly what we send
+      let finalPrice = currentPrice;
+      let finalOriginalAmount = isDolar ? parseDecimal(holdingFormData.currentAmount) : parseDecimal(holdingFormData.originalAmount);
+      
+      if (isEquity && currentPrice) {
+        // If x100 is enabled, divide price by 100 before saving
+        if (holdingFormData.x100) {
+          finalPrice = currentPrice / 100;
+        }
+        
+        // If gbp is enabled, multiply by GBP/USD rate before saving
+        if (holdingFormData.gbp && gbpPrice && gbpPrice > 0) {
+          finalPrice = finalPrice * gbpPrice;
+        }
+        
+        // Adjust originalAmount proportionally
+        if (finalPrice && currentPrice && finalOriginalAmount) {
+          const priceRatio = finalPrice / currentPrice;
+          finalOriginalAmount = finalOriginalAmount * priceRatio;
+        }
+      }
+      
       const payload = {
         personId: selectedPersonId,
         categoryId: holdingFormData.categoryId,
         concept: isDolar ? 'USD' : holdingFormData.concept.trim(),
         currentAmount: parseDecimal(holdingFormData.currentAmount),
-        currentPrice: currentPrice,
-        originalAmount: isDolar ? parseDecimal(holdingFormData.currentAmount) : parseDecimal(holdingFormData.originalAmount),
+        currentPrice: finalPrice,
+        originalAmount: finalOriginalAmount,
         tag: isDolar ? undefined : (holdingFormData.tag.trim() || undefined),
         sector: isDolar ? undefined : (holdingFormData.sector.trim() || undefined),
         custodyEntity: holdingFormData.custodyEntity.trim() || undefined,
@@ -648,20 +701,12 @@ export default function Holdings() {
     // Sort concept groups by total value
     conceptGroups.sort((a, b) => {
       const totalA = a.holdings.reduce((sum, holding) => {
-        let price = holding.currentPrice || 0;
-        if (typeName === 'equity') {
-          if (holding.x100) price = price / 100;
-          if (holding.gbp && gbpPrice) price = price * gbpPrice;
-        }
+        const price = holding.currentPrice || 0;
         const value = typeName === 'dolar' ? (holding.currentAmount || 0) : (holding.currentAmount || 0) * price;
         return sum + value;
       }, 0);
       const totalB = b.holdings.reduce((sum, holding) => {
-        let price = holding.currentPrice || 0;
-        if (typeName === 'equity') {
-          if (holding.x100) price = price / 100;
-          if (holding.gbp && gbpPrice) price = price * gbpPrice;
-        }
+        const price = holding.currentPrice || 0;
         const value = typeName === 'dolar' ? (holding.currentAmount || 0) : (holding.currentAmount || 0) * price;
         return sum + value;
       }, 0);
@@ -671,14 +716,8 @@ export default function Holdings() {
     const sortedHoldings = [...holdingsList];
     if (typeName === 'crypto' || typeName === 'equity') {
       sortedHoldings.sort((a, b) => {
-        let priceA = a.currentPrice || 0;
-        let priceB = b.currentPrice || 0;
-        if (typeName === 'equity') {
-          if (a.x100) priceA = priceA / 100;
-          if (b.x100) priceB = priceB / 100;
-          if (a.gbp && gbpPrice) priceA = priceA * gbpPrice;
-          if (b.gbp && gbpPrice) priceB = priceB * gbpPrice;
-        }
+        const priceA = a.currentPrice || 0;
+        const priceB = b.currentPrice || 0;
         const valueA = (a.currentAmount || 0) * priceA;
         const valueB = (b.currentAmount || 0) * priceB;
         return valueB - valueA;
@@ -736,14 +775,8 @@ export default function Holdings() {
                   const sortedConceptHoldings = [...conceptHoldings];
                   if (typeName === 'crypto' || typeName === 'equity') {
                     sortedConceptHoldings.sort((a, b) => {
-                      let priceA = a.currentPrice || 0;
-                      let priceB = b.currentPrice || 0;
-                      if (typeName === 'equity') {
-                        if (a.x100) priceA = priceA / 100;
-                        if (b.x100) priceB = priceB / 100;
-                        if (a.gbp && gbpPrice) priceA = priceA * gbpPrice;
-                        if (b.gbp && gbpPrice) priceB = priceB * gbpPrice;
-                      }
+                      const priceA = a.currentPrice || 0;
+                      const priceB = b.currentPrice || 0;
                       const valueA = (a.currentAmount || 0) * priceA;
                       const valueB = (b.currentAmount || 0) * priceB;
                       return valueB - valueA;
@@ -758,11 +791,7 @@ export default function Holdings() {
                   
                   // Calculate totals for concept
                   const conceptTotalCurrent = conceptHoldings.reduce((sum, holding) => {
-                    let price = holding.currentPrice || 0;
-                    if (typeName === 'equity') {
-                      if (holding.x100) price = price / 100;
-                      if (holding.gbp && gbpPrice) price = price * gbpPrice;
-                    }
+                    const price = holding.currentPrice || 0;
                     const currentValue = typeName === 'dolar' ? (holding.currentAmount || 0) : (holding.currentAmount || 0) * price;
                     return sum + currentValue;
                   }, 0);
@@ -772,14 +801,7 @@ export default function Holdings() {
                   // Calculate average price for concept (if all have the same price, show it)
                   let conceptPrice = null;
                   if (typeName !== 'dolar' && conceptHoldings.length > 0) {
-                    const prices = conceptHoldings.map(holding => {
-                      let price = holding.currentPrice || 0;
-                      if (typeName === 'equity') {
-                        if (holding.x100) price = price / 100;
-                        if (holding.gbp && gbpPrice) price = price * gbpPrice;
-                      }
-                      return price;
-                    }).filter(p => p > 0);
+                    const prices = conceptHoldings.map(holding => holding.currentPrice || 0).filter(p => p > 0);
                     
                     if (prices.length > 0) {
                       // Check if all prices are the same (within a small tolerance)
@@ -835,33 +857,18 @@ export default function Holdings() {
                       
                       {/* Expanded Detail Rows */}
                       {isExpanded && sortedConceptHoldings.map(holding => {
-                        let displayPrice = holding.currentPrice || 0;
-                        let displayAmount = holding.currentAmount || 0;
-                        
-                        if (typeName === 'equity') {
-                          if (holding.x100) {
-                            displayPrice = displayPrice / 100;
-                          }
-                          if (holding.gbp && gbpPrice) {
-                            displayPrice = displayPrice * gbpPrice;
-                          }
-                        }
+                        const displayPrice = holding.currentPrice || 0;
+                        const displayAmount = holding.currentAmount || 0;
+                        const displayOriginalAmount = holding.originalAmount || 0;
                         
                         const currentValue = displayAmount * displayPrice;
                         const holdingOperations = operations[holding.id] || [];
                         const purchaseCost = holdingOperations
                           .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
                           .reduce((total, op) => {
-                            let opPrice = op.price;
-                            if (typeName === 'equity' && holding.x100) {
-                              opPrice = opPrice / 100;
-                            }
-                            if (typeName === 'equity' && holding.gbp && gbpPrice) {
-                              opPrice = opPrice * gbpPrice;
-                            }
-                            return total + (opPrice * op.amount);
+                            return total + (op.price * op.amount);
                           }, 0);
-                        const costBasis = (holding.originalAmount || 0) + purchaseCost;
+                        const costBasis = displayOriginalAmount + purchaseCost;
                         const gain = currentValue - costBasis;
                         return (
                           <tr key={holding.id} className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">

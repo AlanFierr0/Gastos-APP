@@ -644,21 +644,26 @@ export default function FinancialAnalysis() {
                (t('saving') || 'Ahorro')} - Detalle por Categoría
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-              {(config[detailView] || []).map((cat, index) => {
-                const colors = ['#60a5fa', '#34d399', '#f59e0b', '#a78bfa', '#f472b6', '#fb923c', '#22d3ee', '#84cc16'];
-                const color = colors[index % colors.length];
-                const catValue = current[cat] || 0;
-                return (
-                  <div key={cat} className="rounded-lg p-3 border-2" style={{ borderColor: color, backgroundColor: `${color}15` }}>
-                    <div className="font-semibold" style={{ color }}>
-                      {capitalizeWords(cat)}: <span style={{ color }}>{formatNumber(catValue, 2)}%</span>
+              {(config[detailView] || [])
+                .map((cat) => ({
+                  cat,
+                  value: current[cat] || 0,
+                }))
+                .sort((a, b) => b.value - a.value)
+                .map(({ cat, value: catValue }, index) => {
+                  const colors = ['#60a5fa', '#34d399', '#f59e0b', '#a78bfa', '#f472b6', '#fb923c', '#22d3ee', '#84cc16'];
+                  const color = colors[index % colors.length];
+                  return (
+                    <div key={cat} className="rounded-lg p-3 border-2" style={{ borderColor: color, backgroundColor: `${color}15` }}>
+                      <div className="font-semibold" style={{ color }}>
+                        {capitalizeWords(cat)}: <span style={{ color }}>{formatNumber(catValue, 2)}%</span>
+                      </div>
+                      <div className="text-[#616f89] dark:text-gray-400 text-xs mt-1">
+                        Año {currentYear}
+                      </div>
                     </div>
-                    <div className="text-[#616f89] dark:text-gray-400 text-xs mt-1">
-                      Año {currentYear}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         ) : (

@@ -225,16 +225,27 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    async function loadInvestments() {
+    // Actualizar precios primero, luego cargar inversiones
+    async function updateAndLoad() {
+      try {
+        // Primero actualizar los precios desde las APIs
+        await api.updatePrices();
+        // Luego actualizar los precios de las inversiones
+        await api.updateInvestmentPrices();
+      } catch (error) {
+        console.error('Error updating prices silently:', error);
+        // Continuar aunque falle la actualización
+      }
+      // Cargar inversiones después de actualizar precios
       try {
         const data = await api.getInvestments();
         setInvestments(data || []);
       } catch (error) {
         console.error('Error loading investments:', error);
       }
+      loadGbpPrice();
     }
-    loadInvestments();
-    loadGbpPrice();
+    updateAndLoad();
   }, []);
 
   async function loadGbpPrice() {
@@ -311,28 +322,14 @@ export default function Dashboard() {
     investments.forEach(inv => {
       const typeName = inv.category?.type?.name?.toLowerCase() || '';
       
-      // Aplicar transformaciones X100 y GBP para equity
-      let displayPrice = inv.currentPrice || 0;
-      let displayOriginalAmount = inv.originalAmount || 0;
-      
-      if (typeName === 'equity') {
-        // Aplicar X100: dividir precio por 100
-        if (inv.x100) {
-          displayPrice = displayPrice / 100;
-        }
-        
-        // Aplicar GBP: convertir a dólares
-        if (inv.gbp && gbpPrice) {
-          displayPrice = displayPrice * gbpPrice;
-          displayOriginalAmount = displayOriginalAmount * gbpPrice;
-        }
-      }
+      // Usar precio directamente de la DB (ya está transformado)
+      const price = inv.currentPrice || 0;
       
       // Para dólar, el valor actual es simplemente la cantidad (no se multiplica por precio)
-      // Para crypto y equity, se multiplica cantidad por precio (ya transformado)
+      // Para crypto y equity, se multiplica cantidad por precio (ya transformado en DB)
       const currentValue = typeName === 'dolar' 
         ? (inv.currentAmount || 0)
-        : (inv.currentAmount || 0) * displayPrice;
+        : (inv.currentAmount || 0) * price;
       
       // Calcular costo total: inversión original + suma de precios de operaciones de compra
       const invOperations = operations[inv.id] || [];
@@ -340,19 +337,10 @@ export default function Dashboard() {
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
         .reduce((total, op) => {
-          let opPrice = op.price;
-          // Aplicar misma lógica a precios de operaciones
-          if (typeName === 'equity') {
-            if (inv.x100) {
-              opPrice = opPrice / 100;
-            }
-            if (inv.gbp && gbpPrice) {
-              opPrice = opPrice * gbpPrice;
-            }
-          }
-          return total + (opPrice * op.amount);
+          // Los precios de operaciones también están transformados en la DB
+          return total + (op.price * op.amount);
         }, 0);
-      const costBasis = displayOriginalAmount + purchaseCost;
+      const costBasis = (inv.originalAmount || 0) + purchaseCost;
       const gain = currentValue - costBasis;
 
       totalCurrent += currentValue;
@@ -382,8 +370,9 @@ export default function Dashboard() {
 
   // Datos para el gráfico de distribución por tipo
   // Siempre mostrar los tres tipos: Crypto, Equity y Dólar
+  // Ordenados por porcentaje del total (de mayor a menor)
   const investmentPieData = useMemo(() => {
-    return [
+    const data = [
       {
         name: 'Crypto',
         value: investmentMetrics.byType.crypto.current,
@@ -406,6 +395,17 @@ export default function Dashboard() {
         count: investmentMetrics.byType.dolar.count,
       },
     ];
+    
+    // Ordenar por porcentaje del total (de mayor a menor)
+    return data.sort((a, b) => {
+      const percentageA = investmentMetrics.totalCurrent > 0 
+        ? ((a.value / investmentMetrics.totalCurrent) * 100) 
+        : 0;
+      const percentageB = investmentMetrics.totalCurrent > 0 
+        ? ((b.value / investmentMetrics.totalCurrent) * 100) 
+        : 0;
+      return percentageB - percentageA; // Orden descendente (mayor a menor)
+    });
   }, [investmentMetrics]);
 
   return (

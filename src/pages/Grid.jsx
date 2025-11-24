@@ -273,31 +273,9 @@ export default function Grid() {
     if (isTotal) {
       return; // Don't allow editing totals
     }
-
-    const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
-    const row = gridData[rowIndex];
-    
-    if (!row) return;
-
-    const records = row.monthData[monthKey] || [];
-    const currentTotal = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-    
-    // Get note from first record if exists, or empty string
-    const firstRecord = records[0];
-    const note = firstRecord?.note || '';
-
-    setCellEditModal({
-      rowIndex,
-      monthKey,
-      gridType,
-      records,
-      currentTotal,
-      rowKey: row.key,
-    });
-    // Inicializar con valor vacío para que el usuario ingrese el valor
-    setModalValue('');
-    setModalNote(note);
-    setModalAction(null); // Reset action
+    // El popup solo se abre cuando se edita un concepto dentro de una categoría expandida
+    // Las celdas principales de categorías no abren popup
+    return;
   };
 
   const handleSave = async () => {
@@ -380,20 +358,68 @@ export default function Grid() {
   };
 
   const handleDetailDoubleClick = (record, monthKey, gridType, conceptLabel, categoryName) => {
+    // Solo abrir popup cuando se edita un concepto dentro de una categoría expandida
     if (record) {
       const recordMonthKey = `${extractYearMonth(record.date)?.year}-${String(extractYearMonth(record.date)?.month).padStart(2, '0')}`;
       if (recordMonthKey !== monthKey) return; // Only edit if the record matches this month
-      setEditingDetail({ recordId: record.id, monthKey, gridType, value: String(record.amount || 0), conceptLabel, categoryName });
+      
+      // Obtener todos los registros de este concepto en este mes
+      const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
+      const row = gridData.find(r => r.key === categoryName);
+      if (!row) return;
+      
+      // Filtrar registros por concepto y mes
+      const conceptRecords = row.records.filter(r => {
+        const rConcept = r.concept || r.note || '';
+        const rMonthKey = r.monthKey || `${extractYearMonth(r.date)?.year}-${String(extractYearMonth(r.date)?.month).padStart(2, '0')}`;
+        return rConcept === conceptLabel && rMonthKey === monthKey;
+      });
+      
+      const currentTotal = conceptRecords.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+      const note = conceptRecords[0]?.note || '';
+      
+      // Encontrar el índice de la fila para el modal
+      const rowIndex = gridData.findIndex(r => r.key === categoryName);
+      
+      setCellEditModal({
+        rowIndex,
+        monthKey,
+        gridType,
+        records: conceptRecords,
+        currentTotal,
+        rowKey: categoryName,
+        conceptLabel, // Agregar el concepto al modal
+      });
+      setModalValue('');
+      setModalNote(note);
+      setModalAction(null);
     } else {
-      // Empty cell - allow editing to create new record
-      setEditingDetail({ recordId: null, monthKey, gridType, value: '', conceptLabel, categoryName });
+      // Empty cell - crear nuevo registro
+      const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
+      const row = gridData.find(r => r.key === categoryName);
+      if (!row) return;
+      
+      const rowIndex = gridData.findIndex(r => r.key === categoryName);
+      
+      setCellEditModal({
+        rowIndex,
+        monthKey,
+        gridType,
+        records: [],
+        currentTotal: 0,
+        rowKey: categoryName,
+        conceptLabel,
+      });
+      setModalValue('');
+      setModalNote('');
+      setModalAction(null);
     }
   };
 
   const handleCellModalSave = async () => {
     if (!cellEditModal || !modalAction) return;
 
-    const { rowIndex, monthKey, gridType, records, rowKey } = cellEditModal;
+    const { rowIndex, monthKey, gridType, records, rowKey, conceptLabel } = cellEditModal;
     const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
     const row = gridData[rowIndex];
     
@@ -435,56 +461,106 @@ export default function Grid() {
       // Calcular la diferencia para aplicar al registro (solo si hay cambio de valor)
       const difference = hasValueChange ? (newAmount - currentTotal) : 0;
 
-      // Update first record or create new one
-      if (records.length > 0) {
-        const record = records[0];
-        const updates = {};
-        
-        if (hasValueChange) {
-          updates.amount = Number(record.amount || 0) + difference;
-        }
-        
-        if (modalNote !== (record.note || '')) {
-          updates.note = modalNote.trim() || undefined;
-        }
-        
-        // Solo actualizar si hay cambios
-        if (Object.keys(updates).length > 0) {
+      // Si hay conceptLabel, estamos editando un concepto dentro de una categoría expandida
+      if (conceptLabel) {
+        // Update first record or create new one for this concept
+        if (records.length > 0) {
+          const record = records[0];
+          const updates = {};
+          
+          if (hasValueChange) {
+            updates.amount = Number(record.amount || 0) + difference;
+          }
+          
+          if (modalNote !== (record.note || '')) {
+            updates.note = modalNote.trim() || undefined;
+          }
+          
+          // Solo actualizar si hay cambios
+          if (Object.keys(updates).length > 0) {
+            if (gridType === 'expense') {
+              await updateExpense(record.id, updates);
+            } else {
+              await updateIncome(record.id, updates);
+            }
+          }
+        } else if (hasValueChange) {
+          // Create new record for this concept
+          const [year, month] = monthKey.split('-').map(Number);
+          const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0)).toISOString();
+          
+          const category = categories?.find(c => c.name?.toLowerCase() === rowKey.toLowerCase());
+          const categoryId = category?.id;
+
           if (gridType === 'expense') {
-            await updateExpense(record.id, updates);
+            await addExpense({
+              categoryId,
+              categoryName: rowKey.toLowerCase(),
+              concept: conceptLabel,
+              amount: newAmount,
+              date,
+              note: modalNote.trim() || undefined,
+            });
           } else {
-            await updateIncome(record.id, updates);
+            await addIncome({
+              concept: conceptLabel,
+              categoryName: rowKey,
+              amount: newAmount,
+              date,
+              note: modalNote.trim() || undefined,
+            });
           }
         }
-      } else if (hasValueChange) {
-        // Create new record (solo si hay cambio de valor)
-        const [year, month] = monthKey.split('-').map(Number);
-        const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0)).toISOString();
-        
-        const category = categories?.find(c => c.name?.toLowerCase() === rowKey.toLowerCase());
-        const categoryId = category?.id;
+      } else {
+        // Comportamiento original para cuando no hay conceptLabel (no debería pasar ahora)
+        // Update first record or create new one
+        if (records.length > 0) {
+          const record = records[0];
+          const updates = {};
+          
+          if (hasValueChange) {
+            updates.amount = Number(record.amount || 0) + difference;
+          }
+          
+          if (modalNote !== (record.note || '')) {
+            updates.note = modalNote.trim() || undefined;
+          }
+          
+          // Solo actualizar si hay cambios
+          if (Object.keys(updates).length > 0) {
+            if (gridType === 'expense') {
+              await updateExpense(record.id, updates);
+            } else {
+              await updateIncome(record.id, updates);
+            }
+          }
+        } else if (hasValueChange) {
+          // Create new record (solo si hay cambio de valor)
+          const [year, month] = monthKey.split('-').map(Number);
+          const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0)).toISOString();
+          
+          const category = categories?.find(c => c.name?.toLowerCase() === rowKey.toLowerCase());
+          const categoryId = category?.id;
 
-        if (gridType === 'expense') {
-          await addExpense({
-            categoryId,
-            categoryName: rowKey.toLowerCase(),
-            concept: rowKey,
-            amount: newAmount,
-            date,
-            note: modalNote.trim() || undefined,
-          });
-        } else {
-          await addIncome({
-            concept: rowKey,
-            categoryName: rowKey,
-            amount: newAmount,
-            date,
-            note: modalNote.trim() || undefined,
-          });
+          if (gridType === 'expense') {
+            await addExpense({
+              categoryId,
+              categoryName: rowKey.toLowerCase(),
+              concept: rowKey,
+              amount: newAmount,
+              date,
+              note: modalNote.trim() || undefined,
+            });
+          } else {
+            await addIncome({
+              concept: rowKey,
+              categoryName: rowKey,
+              amount: newAmount,
+              date,
+              note: modalNote.trim() || undefined,
+            });
+          }
         }
-      } else if (modalNote !== (records[0]?.note || '')) {
-        // Solo actualizar nota si no hay registros pero hay nota
-        // Esto no debería pasar normalmente, pero por si acaso
       }
     } catch (error) {
       console.error('Error saving:', error);
@@ -1060,6 +1136,11 @@ export default function Grid() {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                     <span className="font-semibold">Categoría:</span> {capitalizeWords(cellEditModal.rowKey)}
                   </p>
+                  {cellEditModal.conceptLabel && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                      <span className="font-semibold">Concepto:</span> {capitalizeWords(cellEditModal.conceptLabel)}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                     <span className="font-semibold">Mes:</span> {cellEditModal.monthKey}
                   </p>

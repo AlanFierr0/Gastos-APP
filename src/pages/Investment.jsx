@@ -100,11 +100,7 @@ export default function Investment() {
       } else {
         // Para crypto y equity, calcular valor de mercado
         totalValue = cat.investments.reduce((sum, inv) => {
-          let price = inv.currentPrice || 0;
-          if (cat.type === 'equity') {
-            if (inv.x100) price = price / 100;
-            if (inv.gbp && gbpPrice) price = price * gbpPrice;
-          }
+          const price = inv.currentPrice || 0;
           const currentValue = (inv.currentAmount || 0) * price;
           return sum + currentValue;
         }, 0);
@@ -130,9 +126,9 @@ export default function Investment() {
 
   useEffect(() => {
     ensureInvestmentCategories();
-    // Cargar inversiones y actualizar precios automáticamente al cargar la página
-    loadInvestments().then(() => {
-      updatePricesSilently();
+    // Actualizar precios primero, luego cargar inversiones
+    updatePricesSilently().then(() => {
+      loadInvestments();
     });
     // Cargar precio de GBP
     loadGbpPrice();
@@ -453,12 +449,37 @@ export default function Investment() {
       // Para dólares, establecer valores por defecto
       const isEquity = selectedCategory?.type?.name?.toLowerCase() === 'equity';
       
+      // Apply transformations before sending to backend
+      // If X100: divide price by 100
+      // If GBP: convert from GBP to USD (divide by GBP/USD rate)
+      // Backend will save exactly what we send
+      let finalPrice = currentPrice;
+      let finalOriginalAmount = isDolar ? parseDecimal(formData.currentAmount) : parseDecimal(formData.originalAmount);
+      
+      if (isEquity && currentPrice) {
+        // If x100 is enabled, divide price by 100 before saving
+        if (formData.x100) {
+          finalPrice = currentPrice / 100;
+        }
+        
+        // If gbp is enabled, multiply by GBP/USD rate before saving
+        if (formData.gbp && gbpPrice && gbpPrice > 0) {
+          finalPrice = finalPrice * gbpPrice;
+        }
+        
+        // Adjust originalAmount proportionally
+        if (finalPrice && currentPrice && finalOriginalAmount) {
+          const priceRatio = finalPrice / currentPrice;
+          finalOriginalAmount = finalOriginalAmount * priceRatio;
+        }
+      }
+      
       const payload = {
         categoryId: formData.categoryId,
         concept: isDolar ? 'USD' : formData.concept.trim(),
         currentAmount: parseDecimal(formData.currentAmount),
-        currentPrice: currentPrice,
-        originalAmount: isDolar ? parseDecimal(formData.currentAmount) : parseDecimal(formData.originalAmount),
+        currentPrice: finalPrice,
+        originalAmount: finalOriginalAmount,
         tag: isDolar ? undefined : (formData.tag.trim() || undefined),
         sector: isDolar ? undefined : (formData.sector.trim() || undefined),
         custodyEntity: formData.custodyEntity.trim() || undefined,
@@ -706,20 +727,12 @@ export default function Investment() {
     // Sort concept groups by total value
     conceptGroups.sort((a, b) => {
       const totalA = a.investments.reduce((sum, inv) => {
-        let price = inv.currentPrice || 0;
-        if (typeName === 'equity') {
-          if (inv.x100) price = price / 100;
-          if (inv.gbp && gbpPrice) price = price * gbpPrice;
-        }
+        const price = inv.currentPrice || 0;
         const value = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
         return sum + value;
       }, 0);
       const totalB = b.investments.reduce((sum, inv) => {
-        let price = inv.currentPrice || 0;
-        if (typeName === 'equity') {
-          if (inv.x100) price = price / 100;
-          if (inv.gbp && gbpPrice) price = price * gbpPrice;
-        }
+        const price = inv.currentPrice || 0;
         const value = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
         return sum + value;
       }, 0);
@@ -752,30 +765,20 @@ export default function Investment() {
     }
 
     const totalCurrent = investments.reduce((sum, inv) => {
-      let price = inv.currentPrice || 0;
-      if (typeName === 'equity') {
-        if (inv.x100) price = price / 100;
-        if (inv.gbp && gbpPrice) price = price * gbpPrice;
-      }
-      const currentValue = (inv.currentAmount || 0) * price;
+      const price = inv.currentPrice || 0;
+      // For equity/crypto: multiply amount by price (price is already transformed in DB)
+      // For dolar: just use the amount
+      const currentValue = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
       return sum + currentValue;
     }, 0);
     const totalCostBasis = investments.reduce((sum, inv) => {
       // Calcular costo total: inversión original + suma de precios de operaciones de compra
       const invOperations = operations.filter(op => op.investmentId === inv.id);
-      let originalAmount = inv.originalAmount || 0;
-      if (typeName === 'equity' && inv.gbp && gbpPrice) {
-        originalAmount = originalAmount * gbpPrice;
-      }
+      const originalAmount = inv.originalAmount || 0;
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
         .reduce((total, op) => {
-          let opPrice = op.price;
-          if (typeName === 'equity') {
-            if (inv.x100) opPrice = opPrice / 100;
-            if (inv.gbp && gbpPrice) opPrice = opPrice * gbpPrice;
-          }
-          return total + (opPrice * op.amount);
+          return total + (op.price * op.amount);
         }, 0);
       const costBasis = originalAmount + purchaseCost;
       return sum + costBasis;
@@ -787,19 +790,11 @@ export default function Investment() {
     const totalAmount = investments.reduce((sum, inv) => sum + (inv.currentAmount || 0), 0);
     const totalOriginalAmount = investments.reduce((sum, inv) => {
       const invOperations = operations.filter(op => op.investmentId === inv.id);
-      let originalAmount = inv.originalAmount || 0;
-      if (typeName === 'equity' && inv.gbp && gbpPrice) {
-        originalAmount = originalAmount * gbpPrice;
-      }
+      const originalAmount = inv.originalAmount || 0;
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
         .reduce((total, op) => {
-          let opPrice = op.price;
-          if (typeName === 'equity') {
-            if (inv.x100) opPrice = opPrice / 100;
-            if (inv.gbp && gbpPrice) opPrice = opPrice * gbpPrice;
-          }
-          return total + (opPrice * op.amount);
+          return total + (op.price * op.amount);
         }, 0);
       return sum + originalAmount + purchaseCost;
     }, 0);
@@ -893,14 +888,8 @@ export default function Investment() {
                   const sortedConceptInvestments = [...conceptInvestments];
                   if (typeName === 'crypto' || typeName === 'equity') {
                     sortedConceptInvestments.sort((a, b) => {
-                      let priceA = a.currentPrice || 0;
-                      let priceB = b.currentPrice || 0;
-                      if (typeName === 'equity') {
-                        if (a.x100) priceA = priceA / 100;
-                        if (b.x100) priceB = priceB / 100;
-                        if (a.gbp && gbpPrice) priceA = priceA * gbpPrice;
-                        if (b.gbp && gbpPrice) priceB = priceB * gbpPrice;
-                      }
+                      const priceA = a.currentPrice || 0;
+                      const priceB = b.currentPrice || 0;
                       const valueA = (a.currentAmount || 0) * priceA;
                       const valueB = (b.currentAmount || 0) * priceB;
                       return valueB - valueA;
@@ -915,30 +904,18 @@ export default function Investment() {
                   
                   // Calculate totals for concept
                   const conceptTotalCurrent = conceptInvestments.reduce((sum, inv) => {
-                    let price = inv.currentPrice || 0;
-                    if (typeName === 'equity') {
-                      if (inv.x100) price = price / 100;
-                      if (inv.gbp && gbpPrice) price = price * gbpPrice;
-                    }
+                    const price = inv.currentPrice || 0;
                     const currentValue = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
                     return sum + currentValue;
                   }, 0);
                   
                   const conceptTotalCostBasis = conceptInvestments.reduce((sum, inv) => {
                     const invOperations = operations.filter(op => op.investmentId === inv.id);
-                    let originalAmount = inv.originalAmount || 0;
-                    if (typeName === 'equity' && inv.gbp && gbpPrice) {
-                      originalAmount = originalAmount * gbpPrice;
-                    }
+                    const originalAmount = inv.originalAmount || 0;
                     const purchaseCost = invOperations
                       .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
                       .reduce((total, op) => {
-                        let opPrice = op.price;
-                        if (typeName === 'equity') {
-                          if (inv.x100) opPrice = opPrice / 100;
-                          if (inv.gbp && gbpPrice) opPrice = opPrice * gbpPrice;
-                        }
-                        return total + (opPrice * op.amount);
+                        return total + (op.price * op.amount);
                       }, 0);
                     return sum + originalAmount + purchaseCost;
                   }, 0);
@@ -950,14 +927,7 @@ export default function Investment() {
                   // Calculate average price for concept (if all have the same price, show it)
                   let conceptPrice = null;
                   if (typeName !== 'dolar' && conceptInvestments.length > 0) {
-                    const prices = conceptInvestments.map(inv => {
-                      let price = inv.currentPrice || 0;
-                      if (typeName === 'equity') {
-                        if (inv.x100) price = price / 100;
-                        if (inv.gbp && gbpPrice) price = price * gbpPrice;
-                      }
-                      return price;
-                    }).filter(p => p > 0);
+                    const prices = conceptInvestments.map(inv => inv.currentPrice || 0).filter(p => p > 0);
                     
                     if (prices.length > 0) {
                       // Check if all prices are the same (within a small tolerance)
@@ -1026,34 +996,16 @@ export default function Investment() {
                       
                       {/* Expanded Detail Rows */}
                       {isExpanded && sortedConceptInvestments.map(inv => {
-                        // Aplicar lógica X100 y GBP para equity
-                        let displayPrice = inv.currentPrice || 0;
-                        let displayAmount = inv.currentAmount || 0;
-                        let displayOriginalAmount = inv.originalAmount || 0;
-                        
-                        if (typeName === 'equity') {
-                          if (inv.x100) {
-                            displayPrice = displayPrice / 100;
-                          }
-                          if (inv.gbp && gbpPrice) {
-                            displayPrice = displayPrice * gbpPrice;
-                            displayOriginalAmount = displayOriginalAmount * gbpPrice;
-                          }
-                        }
+                        const displayPrice = inv.currentPrice || 0;
+                        const displayAmount = inv.currentAmount || 0;
+                        const displayOriginalAmount = inv.originalAmount || 0;
                         
                         const currentValue = displayAmount * displayPrice;
                         const invOperations = operations.filter(op => op.investmentId === inv.id);
                         const purchaseCost = invOperations
                           .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
                           .reduce((total, op) => {
-                            let opPrice = op.price;
-                            if (typeName === 'equity' && inv.x100) {
-                              opPrice = opPrice / 100;
-                            }
-                            if (typeName === 'equity' && inv.gbp && gbpPrice) {
-                              opPrice = opPrice * gbpPrice;
-                            }
-                            return total + (opPrice * op.amount);
+                            return total + (op.price * op.amount);
                           }, 0);
                         const costBasis = displayOriginalAmount + purchaseCost;
                         const gain = currentValue - costBasis;

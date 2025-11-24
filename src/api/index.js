@@ -193,6 +193,11 @@ export async function updateInvestmentPrices() {
   return data;
 }
 
+export async function updateHoldingPrices() {
+  const { data } = await http.post('/prices/update-holdings');
+  return data;
+}
+
 export async function getPrice(symbol) {
   try {
     const { data } = await http.get(`/prices/symbol/${symbol}`);

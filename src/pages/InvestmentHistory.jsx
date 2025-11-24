@@ -29,7 +29,22 @@ export default function InvestmentHistory() {
   }, [investments]);
 
   useEffect(() => {
-    loadInvestments();
+    // Actualizar precios primero, luego cargar inversiones
+    async function updateAndLoad() {
+      try {
+        // Primero actualizar los precios desde las APIs
+        await api.updatePrices();
+        // Luego actualizar los precios de las inversiones
+        await api.updateInvestmentPrices();
+        // Finalmente cargar las inversiones
+        await loadInvestments();
+      } catch (error) {
+        console.error('Error updating prices silently:', error);
+        // Si falla la actualización, cargar igualmente las inversiones
+        await loadInvestments();
+      }
+    }
+    updateAndLoad();
   }, []);
 
   useEffect(() => {
