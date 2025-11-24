@@ -8,6 +8,7 @@ export default function InvestmentHistory() {
   const [loading, setLoading] = useState(false);
   const [operations, setOperations] = useState({}); // { investmentId: [operations] }
   const [expandedInvestments, setExpandedInvestments] = useState(new Set());
+  const [searchFilter, setSearchFilter] = useState('');
 
   // Group investments by category type
   const groupedInvestments = useMemo(() => {
@@ -78,7 +79,16 @@ export default function InvestmentHistory() {
   }
 
   function renderInvestmentGroup(typeName, investments) {
-    if (investments.length === 0) return null;
+    // Filtrar por término de búsqueda si existe
+    let filteredInvestments = investments;
+    if (searchFilter.trim()) {
+      const filterLower = searchFilter.trim().toLowerCase();
+      filteredInvestments = investments.filter(inv => 
+        (inv.concept || '').toLowerCase().includes(filterLower)
+      );
+    }
+    
+    if (filteredInvestments.length === 0) return null;
 
     const typeLabel = {
       dolar: 'Dólar',
@@ -87,7 +97,7 @@ export default function InvestmentHistory() {
     }[typeName] || typeName;
 
     // Ordenar por valor de mercado descendente para crypto y equity, por cantidad descendente para dólar
-    const sortedInvestments = [...investments];
+    const sortedInvestments = [...filteredInvestments];
     if (typeName === 'crypto' || typeName === 'equity') {
       sortedInvestments.sort((a, b) => {
         const valueA = (a.currentAmount || 0) * (a.currentPrice || 0);
@@ -404,6 +414,29 @@ export default function InvestmentHistory() {
         <div>
           <p className="text-4xl font-black tracking-[-0.033em]">Historial de Inversiones</p>
           <p className="text-[#616f89] dark:text-gray-400">Visualiza todas las inversiones y su historial completo de operaciones</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              placeholder="Buscar por concepto..."
+              className="h-9 px-3 pl-9 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary text-sm w-64"
+            />
+            <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+              search
+            </span>
+            {searchFilter && (
+              <button
+                onClick={() => setSearchFilter('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="Limpiar búsqueda"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 

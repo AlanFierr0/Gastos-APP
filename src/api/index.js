@@ -237,6 +237,73 @@ export async function deleteInvestmentOperation(id) {
   return data;
 }
 
+// Persons API
+export async function getPersons() {
+  try {
+    const { data } = await http.get('/persons');
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createPerson(payload) {
+  const { data } = await http.post('/persons', payload);
+  return data;
+}
+
+export async function updatePerson(id, payload) {
+  const { data } = await http.patch(`/persons/${id}`, payload);
+  return data;
+}
+
+export async function deletePerson(id) {
+  const { data } = await http.delete(`/persons/${id}`);
+  return data;
+}
+
+// Holdings API
+export async function getHoldings(personId) {
+  try {
+    const params = personId ? { personId } : {};
+    const { data } = await http.get('/holdings', { params });
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createHolding(payload) {
+  const { data } = await http.post('/holdings', payload);
+  return data;
+}
+
+export async function updateHolding(id, payload) {
+  const { data } = await http.patch(`/holdings/${id}`, payload);
+  return data;
+}
+
+export async function deleteHolding(id) {
+  const { data } = await http.delete(`/holdings/${id}`);
+  return data;
+}
+
+export async function getHoldingOperations(holdingId) {
+  const params = holdingId ? { holdingId } : {};
+  const { data } = await http.get('/holding-operations', { params });
+  return data;
+}
+
+export async function createHoldingOperation(payload) {
+  const { data } = await http.post('/holding-operations', payload);
+  return data;
+}
+
+export async function deleteHoldingOperation(id) {
+  const { data } = await http.delete(`/holding-operations/${id}`);
+  return data;
+}
+
 
 
 

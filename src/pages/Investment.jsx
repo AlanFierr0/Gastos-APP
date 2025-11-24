@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import Card from '../components/Card.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
 import Toast from '../components/Toast.jsx';
-import { formatMoneyNoDecimals, capitalizeWords } from '../utils/format.js';
+import { capitalizeWords } from '../utils/format.js';
 import * as api from '../api/index.js';
 
 export default function Investment() {
@@ -25,12 +25,15 @@ export default function Investment() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [investmentToDelete, setInvestmentToDelete] = useState(null);
   const [searchTimeout, setSearchTimeout] = useState(null);
+  const [searchFilter, setSearchFilter] = useState('');
+  const [expandedConcepts, setExpandedConcepts] = useState(new Set()); // Set of concept keys that are expanded
   const [formData, setFormData] = useState({
     categoryId: '',
     concept: '',
     currentAmount: '',
     currentPrice: '',
     tag: '',
+    sector: '',
     originalAmount: '',
     custodyEntity: '',
     date: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
@@ -89,7 +92,7 @@ export default function Investment() {
     ];
 
     return categories.map(cat => {
-      let totalValue = 0;
+      let totalValue;
       
       if (cat.type === 'dolar') {
         // Para dólar, el valor es la cantidad directamente
@@ -300,14 +303,42 @@ export default function Investment() {
     return String(value).replace('.', ',');
   }
 
+  // Helper para formatear número con 2 decimales si es menor a 100
+  function formatNumberWithConditionalDecimals(value) {
+    const num = Number(value || 0);
+    if (num < 100) {
+      return num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  // Helper para formatear dinero con 2 decimales si es menor a 100
+  function formatMoneyWithConditionalDecimals(amount, currency = 'ARS', { sign = 'auto' } = {}) {
+    const num = Number(amount || 0);
+    const locale = currency === 'ARS' ? 'es-AR' : undefined;
+    const minDecimals = num < 100 ? 2 : 0;
+    const maxDecimals = num < 100 ? 2 : 0;
+    
+    const formatter = new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: minDecimals,
+      maximumFractionDigits: maxDecimals,
+    });
+    const formatted = formatter.format(Math.abs(num));
+    if (sign === 'none') return formatted;
+    if (sign === 'always') return (num < 0 ? '-' : '+') + formatted;
+    return (num < 0 ? '-' : '') + formatted;
+  }
+
   function handleFormChange(field, value) {
     // Para campos booleanos (x100, gbp), usar el valor directamente
     if (field === 'x100' || field === 'gbp') {
       setFormData(prev => ({ ...prev, [field]: value }));
       return;
     }
-    // Para categoryId, concept, tag, custodyEntity y date, usar el valor directamente sin limpiar
-    if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'custodyEntity' || field === 'date') {
+    // Para categoryId, concept, tag, sector, custodyEntity y date, usar el valor directamente sin limpiar
+    if (field === 'categoryId' || field === 'concept' || field === 'tag' || field === 'sector' || field === 'custodyEntity' || field === 'date') {
       setFormData(prev => ({ ...prev, [field]: value }));
       
       // Si cambia el tipo de inversión, cargar símbolos disponibles
@@ -365,6 +396,7 @@ export default function Investment() {
       currentAmount: '',
       currentPrice: '',
       tag: '',
+      sector: '',
       originalAmount: '',
       custodyEntity: '',
       date: new Date().toISOString().split('T')[0],
@@ -428,6 +460,7 @@ export default function Investment() {
         currentPrice: currentPrice,
         originalAmount: isDolar ? parseDecimal(formData.currentAmount) : parseDecimal(formData.originalAmount),
         tag: isDolar ? undefined : (formData.tag.trim() || undefined),
+        sector: isDolar ? undefined : (formData.sector.trim() || undefined),
         custodyEntity: formData.custodyEntity.trim() || undefined,
         date: formData.date,
         x100: isEquity ? formData.x100 : undefined,
@@ -459,11 +492,15 @@ export default function Investment() {
 
   async function handleAddOperation(inv) {
     setSelectedInvestmentId(inv.id);
+    const typeName = inv.category?.type?.name?.toLowerCase();
+    // Para dólar, no establecer precio
+    const shouldSetPrice = typeName !== 'dolar' && inv.currentPrice;
     setOperationData({
       type: 'COMPRA',
       amount: '',
-      price: inv.currentPrice ? formatDecimal(inv.currentPrice) : '',
+      price: shouldSetPrice ? formatDecimal(inv.currentPrice) : '',
       note: '',
+      date: new Date().toISOString().split('T')[0],
     });
     setOperationAmountError(null);
     setShowOperationForm(true);
@@ -485,7 +522,7 @@ export default function Investment() {
         if (selectedInv) {
           const amountToSell = parseDecimal(normalized);
           if (!isNaN(amountToSell) && amountToSell > selectedInv.currentAmount) {
-            setOperationAmountError(`No puedes vender más de ${selectedInv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`);
+            setOperationAmountError(`No puedes vender más de ${formatNumberWithConditionalDecimals(selectedInv.currentAmount)}`);
           } else {
             setOperationAmountError(null);
           }
@@ -516,7 +553,7 @@ export default function Investment() {
         const amountToSell = parseDecimal(operationData.amount);
         if (amountToSell > selectedInv.currentAmount) {
           setToast({
-            message: `No puedes vender más de lo que tienes. Cantidad disponible: ${selectedInv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
+            message: `No puedes vender más de lo que tienes. Cantidad disponible: ${formatNumberWithConditionalDecimals(selectedInv.currentAmount)}`,
             type: 'error',
           });
           return;
@@ -525,11 +562,16 @@ export default function Investment() {
     }
 
     try {
+      const selectedInv = investments.find(inv => inv.id === selectedInvestmentId);
+      const typeName = selectedInv?.category?.type?.name?.toLowerCase();
+      // Para dólar, no enviar precio
+      const shouldSendPrice = typeName !== 'dolar' && operationData.price;
+      
       await api.createInvestmentOperation({
         investmentId: selectedInvestmentId,
         type: operationData.type,
         amount: parseDecimal(operationData.amount),
-        price: operationData.price ? parseDecimal(operationData.price) : undefined,
+        price: shouldSendPrice ? parseDecimal(operationData.price) : undefined,
         note: operationData.note || undefined,
         date: operationData.date,
       });
@@ -568,6 +610,7 @@ export default function Investment() {
       currentAmount: formatDecimal(inv.currentAmount),
       currentPrice: inv.currentPrice ? formatDecimal(inv.currentPrice) : '',
       tag: inv.tag || '',
+      sector: inv.sector || '',
       originalAmount: formatDecimal(inv.originalAmount),
       custodyEntity: inv.custodyEntity || '',
       date: inv.date ? new Date(inv.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -608,6 +651,36 @@ export default function Investment() {
     setInvestmentToDelete(null);
   }
 
+  // Group investments by concept
+  function groupInvestmentsByConcept(investments) {
+    const conceptMap = new Map();
+    
+    investments.forEach(inv => {
+      const concept = inv.concept || 'Sin concepto';
+      if (!conceptMap.has(concept)) {
+        conceptMap.set(concept, []);
+      }
+      conceptMap.get(concept).push(inv);
+    });
+    
+    return Array.from(conceptMap.entries()).map(([concept, invs]) => ({
+      concept,
+      investments: invs,
+    }));
+  }
+
+  function toggleConceptExpansion(conceptKey) {
+    setExpandedConcepts(prev => {
+      const next = new Set(prev);
+      if (next.has(conceptKey)) {
+        next.delete(conceptKey);
+      } else {
+        next.add(conceptKey);
+      }
+      return next;
+    });
+  }
+
   function renderInvestmentGroup(typeName, investments) {
     if (investments.length === 0) return null;
 
@@ -616,6 +689,42 @@ export default function Investment() {
       equity: 'Equity',
       crypto: 'Crypto',
     }[typeName] || typeName;
+
+    // Group by concept
+    let conceptGroups = groupInvestmentsByConcept(investments);
+    
+    // Filtrar por término de búsqueda si existe
+    if (searchFilter.trim()) {
+      const filterLower = searchFilter.trim().toLowerCase();
+      conceptGroups = conceptGroups.filter(({ concept }) => 
+        concept.toLowerCase().includes(filterLower)
+      );
+    }
+    
+    if (conceptGroups.length === 0) return null;
+    
+    // Sort concept groups by total value
+    conceptGroups.sort((a, b) => {
+      const totalA = a.investments.reduce((sum, inv) => {
+        let price = inv.currentPrice || 0;
+        if (typeName === 'equity') {
+          if (inv.x100) price = price / 100;
+          if (inv.gbp && gbpPrice) price = price * gbpPrice;
+        }
+        const value = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
+        return sum + value;
+      }, 0);
+      const totalB = b.investments.reduce((sum, inv) => {
+        let price = inv.currentPrice || 0;
+        if (typeName === 'equity') {
+          if (inv.x100) price = price / 100;
+          if (inv.gbp && gbpPrice) price = price * gbpPrice;
+        }
+        const value = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
+        return sum + value;
+      }, 0);
+      return totalB - totalA;
+    });
 
     // Ordenar por valor de mercado descendente para crypto y equity, por cantidad descendente para dólar
     const sortedInvestments = [...investments];
@@ -703,33 +812,33 @@ export default function Investment() {
             <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Total Cantidad</p>
-                <p className="text-lg font-bold">{totalAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</p>
+                <p className="text-lg font-bold">{formatNumberWithConditionalDecimals(totalAmount)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Total Inversión Original</p>
-                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalOriginalAmount, 'ARS', { sign: 'none' })}</p>
+                <p className="text-lg font-bold">{formatMoneyWithConditionalDecimals(totalOriginalAmount, 'ARS', { sign: 'none' })}</p>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Total Actual</p>
-                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCurrent, 'ARS', { sign: 'none' })}</p>
+                <p className="text-lg font-bold">{formatMoneyWithConditionalDecimals(totalCurrent, 'ARS', { sign: 'none' })}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Total Original</p>
-                <p className="text-lg font-bold">{formatMoneyNoDecimals(totalCostBasis, 'ARS', { sign: 'none' })}</p>
+                <p className="text-lg font-bold">{formatMoneyWithConditionalDecimals(totalCostBasis, 'ARS', { sign: 'none' })}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia/Pérdida</p>
                 <p className={`text-lg font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatMoneyNoDecimals(totalGain, 'ARS')} ({totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%)
+                  {formatMoneyWithConditionalDecimals(totalGain, 'ARS')} ({totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%)
                 </p>
               </div>
             </div>
           )}
 
-          {/* Table */}
+          {/* Table - Grouped by Concept */}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -748,110 +857,276 @@ export default function Investment() {
                   {typeName !== 'dolar' && (
                     <th className="text-right py-2 px-3 text-sm font-semibold">Ganancia/Pérdida</th>
                   )}
-                  {typeName !== 'dolar' && (
-                    <th className="text-left py-2 px-3 text-sm font-semibold">Tag</th>
-                  )}
-                  <th className="text-left py-2 px-3 text-sm font-semibold">Entidad de Custodia</th>
-                  <th className="text-center py-2 px-3 text-sm font-semibold">Acciones</th>
+                  {typeName !== 'dolar' && (() => {
+                    const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
+                    return hasAnyExpanded ? (
+                      <th className="text-left py-2 px-3 text-sm font-semibold">Mercado</th>
+                    ) : null;
+                  })()}
+                  {typeName !== 'dolar' && (() => {
+                    const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
+                    return hasAnyExpanded ? (
+                      <th className="text-left py-2 px-3 text-sm font-semibold">Sector</th>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
+                    return hasAnyExpanded ? (
+                      <th className="text-left py-2 px-3 text-sm font-semibold">Entidad de Custodia</th>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
+                    return hasAnyExpanded ? (
+                      <th className="text-center py-2 px-3 text-sm font-semibold">Acciones</th>
+                    ) : null;
+                  })()}
                 </tr>
               </thead>
               <tbody>
-                {sortedInvestments.map(inv => {
-                  // Aplicar lógica X100 y GBP para equity
-                  let displayPrice = inv.currentPrice || 0;
-                  let displayAmount = inv.currentAmount || 0;
-                  let displayOriginalAmount = inv.originalAmount || 0;
+                {conceptGroups.map(({ concept, investments: conceptInvestments }) => {
+                  const conceptKey = `${typeName}-${concept}`;
+                  const isExpanded = expandedConcepts.has(conceptKey);
+                  const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
                   
-                  if (typeName === 'equity') {
-                    // Aplicar X100: dividir precio por 100
-                    if (inv.x100) {
-                      displayPrice = displayPrice / 100;
+                  // Sort investments within concept
+                  const sortedConceptInvestments = [...conceptInvestments];
+                  if (typeName === 'crypto' || typeName === 'equity') {
+                    sortedConceptInvestments.sort((a, b) => {
+                      let priceA = a.currentPrice || 0;
+                      let priceB = b.currentPrice || 0;
+                      if (typeName === 'equity') {
+                        if (a.x100) priceA = priceA / 100;
+                        if (b.x100) priceB = priceB / 100;
+                        if (a.gbp && gbpPrice) priceA = priceA * gbpPrice;
+                        if (b.gbp && gbpPrice) priceB = priceB * gbpPrice;
+                      }
+                      const valueA = (a.currentAmount || 0) * priceA;
+                      const valueB = (b.currentAmount || 0) * priceB;
+                      return valueB - valueA;
+                    });
+                  } else if (typeName === 'dolar') {
+                    sortedConceptInvestments.sort((a, b) => {
+                      const amountA = a.currentAmount || 0;
+                      const amountB = b.currentAmount || 0;
+                      return amountB - amountA;
+                    });
+                  }
+                  
+                  // Calculate totals for concept
+                  const conceptTotalCurrent = conceptInvestments.reduce((sum, inv) => {
+                    let price = inv.currentPrice || 0;
+                    if (typeName === 'equity') {
+                      if (inv.x100) price = price / 100;
+                      if (inv.gbp && gbpPrice) price = price * gbpPrice;
                     }
+                    const currentValue = typeName === 'dolar' ? (inv.currentAmount || 0) : (inv.currentAmount || 0) * price;
+                    return sum + currentValue;
+                  }, 0);
+                  
+                  const conceptTotalCostBasis = conceptInvestments.reduce((sum, inv) => {
+                    const invOperations = operations.filter(op => op.investmentId === inv.id);
+                    let originalAmount = inv.originalAmount || 0;
+                    if (typeName === 'equity' && inv.gbp && gbpPrice) {
+                      originalAmount = originalAmount * gbpPrice;
+                    }
+                    const purchaseCost = invOperations
+                      .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+                      .reduce((total, op) => {
+                        let opPrice = op.price;
+                        if (typeName === 'equity') {
+                          if (inv.x100) opPrice = opPrice / 100;
+                          if (inv.gbp && gbpPrice) opPrice = opPrice * gbpPrice;
+                        }
+                        return total + (opPrice * op.amount);
+                      }, 0);
+                    return sum + originalAmount + purchaseCost;
+                  }, 0);
+                  
+                  const conceptTotalGain = conceptTotalCurrent - conceptTotalCostBasis;
+                  const conceptTotalGainPercent = conceptTotalCostBasis > 0 ? ((conceptTotalGain / conceptTotalCostBasis) * 100) : 0;
+                  const conceptTotalAmount = conceptInvestments.reduce((sum, inv) => sum + (inv.currentAmount || 0), 0);
+                  
+                  // Calculate average price for concept (if all have the same price, show it)
+                  let conceptPrice = null;
+                  if (typeName !== 'dolar' && conceptInvestments.length > 0) {
+                    const prices = conceptInvestments.map(inv => {
+                      let price = inv.currentPrice || 0;
+                      if (typeName === 'equity') {
+                        if (inv.x100) price = price / 100;
+                        if (inv.gbp && gbpPrice) price = price * gbpPrice;
+                      }
+                      return price;
+                    }).filter(p => p > 0);
                     
-                    // Aplicar GBP: convertir a dólares
-                    if (inv.gbp && gbpPrice) {
-                      displayPrice = displayPrice * gbpPrice;
-                      displayOriginalAmount = displayOriginalAmount * gbpPrice;
+                    if (prices.length > 0) {
+                      // Check if all prices are the same (within a small tolerance)
+                      const firstPrice = prices[0];
+                      const allSame = prices.every(p => Math.abs(p - firstPrice) < 0.01);
+                      if (allSame) {
+                        conceptPrice = firstPrice;
+                      }
                     }
                   }
                   
-                  const currentValue = displayAmount * displayPrice;
-                  // Calcular costo total: inversión original + suma de precios de operaciones de compra
-                  const invOperations = operations.filter(op => op.investmentId === inv.id);
-                  const purchaseCost = invOperations
-                    .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
-                    .reduce((total, op) => {
-                      let opPrice = op.price;
-                      // Aplicar misma lógica a precios de operaciones
-                      if (typeName === 'equity' && inv.x100) {
-                        opPrice = opPrice / 100;
-                      }
-                      if (typeName === 'equity' && inv.gbp && gbpPrice) {
-                        opPrice = opPrice * gbpPrice;
-                      }
-                      return total + (opPrice * op.amount);
-                    }, 0);
-                  const costBasis = displayOriginalAmount + purchaseCost;
-                  const gain = currentValue - costBasis;
-                  const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
                   return (
-                    <React.Fragment key={inv.id}>
-                      <tr className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="py-2 px-3">{inv.concept}</td>
-                        <td className="text-right py-2 px-3">{displayAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                    <React.Fragment key={conceptKey}>
+                      {/* Concept Summary Row */}
+                      <tr 
+                        className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                        onClick={() => toggleConceptExpansion(conceptKey)}
+                      >
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`material-symbols-outlined text-sm transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                              chevron_right
+                            </span>
+                            <span className="font-semibold">{concept}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              ({conceptInvestments.length} {conceptInvestments.length === 1 ? 'inversión' : 'inversiones'})
+                            </span>
+                          </div>
+                        </td>
+                        <td className="text-right py-2 px-3 font-semibold">
+                          {formatNumberWithConditionalDecimals(conceptTotalAmount)}
+                        </td>
                         {typeName !== 'dolar' && (
-                          <td className="text-right py-2 px-3">{displayPrice > 0 ? formatMoneyNoDecimals(displayPrice, 'ARS', { sign: 'none' }) : '-'}</td>
+                          <td className="text-right py-2 px-3 font-semibold">
+                            {conceptPrice !== null ? formatMoneyWithConditionalDecimals(conceptPrice, 'ARS', { sign: 'none' }) : '-'}
+                          </td>
                         )}
                         {(typeName === 'crypto' || typeName === 'equity') && (
                           <td className="text-right py-2 px-3 font-semibold">
-                            {formatMoneyNoDecimals(currentValue, 'ARS', { sign: 'none' })}
+                            {formatMoneyWithConditionalDecimals(conceptTotalCurrent, 'ARS', { sign: 'none' })}
                           </td>
                         )}
                         {typeName !== 'dolar' && (
-                          <td className="text-right py-2 px-3">
-                            {formatMoneyNoDecimals(costBasis, 'ARS', { sign: 'none' })}
+                          <td className="text-right py-2 px-3 font-semibold">
+                            {formatMoneyWithConditionalDecimals(conceptTotalCostBasis, 'ARS', { sign: 'none' })}
                           </td>
                         )}
                         {typeName !== 'dolar' && (
-                          <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatMoneyNoDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
+                          <td className={`text-right py-2 px-3 font-semibold ${conceptTotalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatMoneyWithConditionalDecimals(conceptTotalGain, 'ARS')} ({conceptTotalGainPercent >= 0 ? '+' : ''}{conceptTotalGainPercent.toFixed(2)}%)
                           </td>
                         )}
-                        {typeName !== 'dolar' && (
-                          <td className="py-2 px-3">{inv.tag || '-'}</td>
+                        {typeName !== 'dolar' && hasAnyExpanded && (
+                          <td className="py-2 px-3">-</td>
                         )}
-                        <td className="py-2 px-3">{inv.custodyEntity || '-'}</td>
-                        <td className="text-center py-2 px-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleEdit(inv)}
-                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
-                              title="Editar"
-                            >
-                              Editar
-                            </button>
-                            <span className="text-gray-300 dark:text-gray-600">|</span>
-                            <button
-                              onClick={() => handleDeleteClick(inv)}
-                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm"
-                              title="Eliminar"
-                            >
-                              Eliminar
-                            </button>
-                            <span className="text-gray-300 dark:text-gray-600">|</span>
-                            <button
-                              onClick={() => handleAddOperation(inv)}
-                              className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-sm"
-                              title="Agregar Operación"
-                            >
-                              Operación
-                            </button>
-                          </div>
-                        </td>
+                        {typeName !== 'dolar' && hasAnyExpanded && (
+                          <td className="py-2 px-3">-</td>
+                        )}
+                        {hasAnyExpanded && (
+                          <td className="py-2 px-3">-</td>
+                        )}
+                        {hasAnyExpanded && (
+                          <td className="text-center py-2 px-3">-</td>
+                        )}
                       </tr>
-                    </React.Fragment>
-                  );
-                })}
+                      
+                      {/* Expanded Detail Rows */}
+                      {isExpanded && sortedConceptInvestments.map(inv => {
+                        // Aplicar lógica X100 y GBP para equity
+                        let displayPrice = inv.currentPrice || 0;
+                        let displayAmount = inv.currentAmount || 0;
+                        let displayOriginalAmount = inv.originalAmount || 0;
+                        
+                        if (typeName === 'equity') {
+                          if (inv.x100) {
+                            displayPrice = displayPrice / 100;
+                          }
+                          if (inv.gbp && gbpPrice) {
+                            displayPrice = displayPrice * gbpPrice;
+                            displayOriginalAmount = displayOriginalAmount * gbpPrice;
+                          }
+                        }
+                        
+                        const currentValue = displayAmount * displayPrice;
+                        const invOperations = operations.filter(op => op.investmentId === inv.id);
+                        const purchaseCost = invOperations
+                          .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+                          .reduce((total, op) => {
+                            let opPrice = op.price;
+                            if (typeName === 'equity' && inv.x100) {
+                              opPrice = opPrice / 100;
+                            }
+                            if (typeName === 'equity' && inv.gbp && gbpPrice) {
+                              opPrice = opPrice * gbpPrice;
+                            }
+                            return total + (opPrice * op.amount);
+                          }, 0);
+                        const costBasis = displayOriginalAmount + purchaseCost;
+                        const gain = currentValue - costBasis;
+                        const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
+                        
+                        return (
+                          <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+                            <td className="py-2 px-3 pl-8">
+                              {inv.concept}
+                            </td>
+                            <td className="text-right py-2 px-3">{formatNumberWithConditionalDecimals(displayAmount)}</td>
+                            {typeName !== 'dolar' && (
+                              <td className="text-right py-2 px-3">{displayPrice > 0 ? formatMoneyWithConditionalDecimals(displayPrice, 'ARS', { sign: 'none' }) : '-'}</td>
+                            )}
+                            {(typeName === 'crypto' || typeName === 'equity') && (
+                              <td className="text-right py-2 px-3 font-semibold">
+                                {formatMoneyWithConditionalDecimals(currentValue, 'ARS', { sign: 'none' })}
+                              </td>
+                            )}
+                            {typeName !== 'dolar' && (
+                              <td className="text-right py-2 px-3">
+                                {formatMoneyWithConditionalDecimals(costBasis, 'ARS', { sign: 'none' })}
+                              </td>
+                            )}
+                            {typeName !== 'dolar' && (
+                              <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatMoneyWithConditionalDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
+                              </td>
+                            )}
+                            {typeName !== 'dolar' && hasAnyExpanded && (
+                              <td className="py-2 px-3">{inv.tag || '-'}</td>
+                            )}
+                            {typeName !== 'dolar' && hasAnyExpanded && (
+                              <td className="py-2 px-3">{inv.sector || '-'}</td>
+                            )}
+                            {hasAnyExpanded && (
+                              <td className="py-2 px-3">{inv.custodyEntity || '-'}</td>
+                            )}
+                            {hasAnyExpanded && (
+                              <td className="text-center py-2 px-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleEdit(inv); }}
+                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
+                                    title="Editar"
+                                  >
+                                    Editar
+                                  </button>
+                                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(inv); }}
+                                    className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm"
+                                    title="Eliminar"
+                                  >
+                                    Eliminar
+                                  </button>
+                                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleAddOperation(inv); }}
+                                    className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-sm"
+                                    title="Agregar Operación"
+                                  >
+                                    Operación
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                </React.Fragment>
+              );
+            })}
               </tbody>
             </table>
           </div>
@@ -875,21 +1150,27 @@ export default function Investment() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setSelectedInvestmentId(null);
-                setOperationData({
-                  type: 'COMPRA',
-                  amount: '',
-                  price: '',
-                  note: '',
-                });
-                setShowOperationForm(true);
-              }}
-              className="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
-            >
-              Agregar Operación
-            </button>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Buscar por concepto..."
+                className="h-9 px-3 pl-9 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary text-sm w-64"
+              />
+              <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                search
+              </span>
+              {searchFilter && (
+                <button
+                  onClick={() => setSearchFilter('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              )}
+            </div>
             <button
               onClick={() => setShowForm(true)}
               className="h-9 px-4 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
@@ -1048,11 +1329,24 @@ export default function Investment() {
 
               {!isDolar && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Tag</label>
+                  <label className="block text-sm font-medium mb-1">Mercado</label>
                   <input
                     type="text"
                     value={formData.tag}
                     onChange={(e) => handleFormChange('tag', e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Opcional"
+                  />
+                </div>
+              )}
+
+              {!isDolar && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Sector</label>
+                  <input
+                    type="text"
+                    value={formData.sector}
+                    onChange={(e) => handleFormChange('sector', e.target.value)}
                     className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Opcional"
                   />
@@ -1120,9 +1414,32 @@ export default function Investment() {
         );
       })()}
 
+      {/* Modal de Agregar Operación */}
       {showOperationForm && (
-        <Card title="Agregar Operación">
-          <form onSubmit={handleOperationSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => {
+          setShowOperationForm(false);
+          setSelectedInvestmentId(null);
+          setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
+        }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  Agregar Operación
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowOperationForm(false);
+                    setSelectedInvestmentId(null);
+                    setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
+                  }}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <span className="material-symbols-outlined text-2xl">close</span>
+                </button>
+              </div>
+              <form onSubmit={handleOperationSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Inversión *</label>
               <CustomSelect
@@ -1138,8 +1455,14 @@ export default function Investment() {
                     // Obtener precio actual desde la API automáticamente
                     if (selectedInv) {
                       const typeName = selectedInv.category?.type?.name?.toLowerCase();
-                      // Solo obtener precio automáticamente para crypto y equity
-                      if (typeName === 'crypto' || typeName === 'equity') {
+                      // Para dólar, no usar precio
+                      if (typeName === 'dolar') {
+                        setOperationData(prev => ({ 
+                          ...prev, 
+                          price: ''
+                        }));
+                      } else if (typeName === 'crypto' || typeName === 'equity') {
+                        // Solo obtener precio automáticamente para crypto y equity
                         try {
                           const price = await api.getPrice(selectedInv.concept.toUpperCase());
                           if (price && price > 0) {
@@ -1164,12 +1487,6 @@ export default function Investment() {
                             }));
                           }
                         }
-                      } else if (selectedInv.currentPrice) {
-                        // Para dólar, usar el precio actual si existe
-                        setOperationData(prev => ({ 
-                          ...prev, 
-                          price: formatDecimal(selectedInv.currentPrice)
-                        }));
                       }
                     }
                   }
@@ -1224,7 +1541,7 @@ export default function Investment() {
                 if (selectedInv) {
                   return (
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Disponible: {selectedInv.currentAmount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      Disponible: {formatNumberWithConditionalDecimals(selectedInv.currentAmount)}
                     </p>
                   );
                 }
@@ -1232,21 +1549,31 @@ export default function Investment() {
               })()}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Precio por Unidad</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={operationData.price}
-                onChange={(e) => {
-                  const cleaned = e.target.value.replace(/[^0-9,.-]/g, '');
-                  const normalized = cleaned.replace('.', ',');
-                  setOperationData(prev => ({ ...prev, price: normalized }));
-                }}
-                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Ej: 1000,50"
-              />
-            </div>
+            {selectedInvestmentId && (() => {
+              const selectedInv = investments.find(inv => inv.id === selectedInvestmentId);
+              const typeName = selectedInv?.category?.type?.name?.toLowerCase();
+              // No mostrar precio para dólar
+              if (typeName === 'dolar') {
+                return null;
+              }
+              return (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Precio por Unidad</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={operationData.price}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^0-9,.-]/g, '');
+                      const normalized = cleaned.replace('.', ',');
+                      setOperationData(prev => ({ ...prev, price: normalized }));
+                    }}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: 1000,50"
+                  />
+                </div>
+              );
+            })()}
 
             <div>
               <label className="block text-sm font-medium mb-1">Fecha *</label>
@@ -1270,27 +1597,29 @@ export default function Investment() {
               />
             </div>
 
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOperationForm(false);
-                  setSelectedInvestmentId(null);
-                  setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
-                }}
-                className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
-              >
-                Cancelar
-              </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOperationForm(false);
+                      setSelectedInvestmentId(null);
+                      setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
+                    }}
+                    className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
-        </Card>
+          </div>
+        </div>
       )}
 
       {loading ? (

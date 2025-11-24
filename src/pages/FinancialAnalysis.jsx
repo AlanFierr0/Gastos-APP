@@ -253,11 +253,58 @@ function buildYearlyPercents(expenses, config) {
   });
 }
 
+function buildYearlyPercentsByCategory(expenses, config, bucket) {
+  // Build totals per year per category for a specific bucket
+  const yearTotals = new Map();
+  const yearCategory = new Map(); // year -> { categoryName: amount }
+
+  const excludedCategories = ['crypto', 'dolar', 'equity'];
+  const bucketCategories = config[bucket] || [];
+
+  for (const e of (expenses || [])) {
+    const d = new Date(e.date);
+    if (Number.isNaN(d.getTime())) continue;
+    const year = d.getUTCFullYear();
+    
+    const amount = Number(e.amount || 0);
+    const cat = (typeof e.category === 'object' && e.category) ? (e.category.name || '') : (e.category || '');
+    const lowerCat = String(cat).trim().toLowerCase();
+    
+    if (excludedCategories.includes(lowerCat)) continue;
+    if (!bucketCategories.includes(lowerCat)) continue;
+
+    yearTotals.set(year, (yearTotals.get(year) || 0) + amount);
+    
+    const yearData = yearCategory.get(year) || {};
+    yearData[lowerCat] = (yearData[lowerCat] || 0) + amount;
+    yearCategory.set(year, yearData);
+  }
+
+  const years = Array.from(yearTotals.keys()).sort((a, b) => a - b);
+  const allCategories = new Set();
+  years.forEach(y => {
+    Object.keys(yearCategory.get(y) || {}).forEach(cat => allCategories.add(cat));
+  });
+
+  return years.map((y) => {
+    const total = yearTotals.get(y) || 0;
+    const yearData = yearCategory.get(y) || {};
+    const safePct = (num) => (total !== 0 ? (num / total) * 100 : 0);
+    
+    const result = { year: String(y) };
+    allCategories.forEach(cat => {
+      result[cat] = Number(safePct(yearData[cat] || 0).toFixed(2).replace(',', '.'));
+    });
+    return result;
+  });
+}
+
 export default function FinancialAnalysis() {
   const { expenses, categories, t } = useApp();
   const { config, toggle, setTarget, formatTargetValue, loading, autoCompleteThirdBucket } = useFAConfig(categories);
   const [editingTarget, setEditingTarget] = React.useState({ bucket: null, value: '' });
   const [collapsed, setCollapsed] = React.useState({ fixed: false, wellbeing: false, saving: false });
+  const [detailView, setDetailView] = React.useState(null); // null, 'fixed', 'wellbeing', or 'saving'
   const hasInitializedCollapsed = React.useRef(false);
 
   // If there's a saved configuration, collapse all sections by default (only once on initial load)
@@ -279,7 +326,13 @@ export default function FinancialAnalysis() {
     hasInitializedCollapsed.current = true;
   }, [config, loading]);
 
-  const series = React.useMemo(() => buildYearlyPercents(expenses, config), [expenses, config]);
+  const series = React.useMemo(() => {
+    if (detailView) {
+      return buildYearlyPercentsByCategory(expenses, config, detailView);
+    }
+    return buildYearlyPercents(expenses, config);
+  }, [expenses, config, detailView]);
+  
   const currentYear = new Date().getFullYear();
   const current = series.find(s => Number(s.year) === currentYear) || { fixed: 0, wellbeing: 0, saving: 0 };
   const deviation = {
@@ -349,12 +402,23 @@ export default function FinancialAnalysis() {
       <Card title={t('categoriesConfig') || 'Configuración de categorías'}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <h3 
-              className={`font-semibold mb-2 ${collapsed.fixed ? 'cursor-pointer hover:text-primary' : ''}`}
-              onClick={collapsed.fixed ? () => setCollapsed((s) => ({ ...s, fixed: false })) : undefined}
-            >
-              {t('fixedExpense') || 'Gasto fijo'}
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 
+                className={`font-semibold ${collapsed.fixed ? 'cursor-pointer hover:text-primary' : ''}`}
+                onClick={collapsed.fixed ? () => setCollapsed((s) => ({ ...s, fixed: false })) : undefined}
+              >
+                {t('fixedExpense') || 'Gasto fijo'}
+              </h3>
+              {config.fixed && config.fixed.length > 0 && (
+                <button
+                  onClick={() => setDetailView('fixed')}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  title="Ver detalle en gráfico"
+                >
+                  Ver detalle →
+                </button>
+              )}
+            </div>
             {!collapsed.fixed ? (
               <div className="rounded border border-gray-200 dark:border-gray-700">
                 {catList('fixed')}
@@ -391,12 +455,23 @@ export default function FinancialAnalysis() {
             </div>
           </div>
           <div>
-            <h3 
-              className={`font-semibold mb-2 ${collapsed.wellbeing ? 'cursor-pointer hover:text-primary' : ''}`}
-              onClick={collapsed.wellbeing ? () => setCollapsed((s) => ({ ...s, wellbeing: false })) : undefined}
-            >
-              {t('wellbeing') || 'Bienestar'}
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 
+                className={`font-semibold ${collapsed.wellbeing ? 'cursor-pointer hover:text-primary' : ''}`}
+                onClick={collapsed.wellbeing ? () => setCollapsed((s) => ({ ...s, wellbeing: false })) : undefined}
+              >
+                {t('wellbeing') || 'Bienestar'}
+              </h3>
+              {config.wellbeing && config.wellbeing.length > 0 && (
+                <button
+                  onClick={() => setDetailView('wellbeing')}
+                  className="text-xs text-green-600 dark:text-green-400 hover:underline"
+                  title="Ver detalle en gráfico"
+                >
+                  Ver detalle →
+                </button>
+              )}
+            </div>
             {!collapsed.wellbeing ? (
               <div className="rounded border border-gray-200 dark:border-gray-700">
                 {catList('wellbeing')}
@@ -433,12 +508,23 @@ export default function FinancialAnalysis() {
             </div>
           </div>
           <div>
-            <h3 
-              className={`font-semibold mb-2 ${collapsed.saving ? 'cursor-pointer hover:text-primary' : ''}`}
-              onClick={collapsed.saving ? () => setCollapsed((s) => ({ ...s, saving: false })) : undefined}
-            >
-              {t('saving') || 'Ahorro'}
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 
+                className={`font-semibold ${collapsed.saving ? 'cursor-pointer hover:text-primary' : ''}`}
+                onClick={collapsed.saving ? () => setCollapsed((s) => ({ ...s, saving: false })) : undefined}
+              >
+                {t('saving') || 'Ahorro'}
+              </h3>
+              {config.saving && config.saving.length > 0 && (
+                <button
+                  onClick={() => setDetailView('saving')}
+                  className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
+                  title="Ver detalle en gráfico"
+                >
+                  Ver detalle →
+                </button>
+              )}
+            </div>
             {!collapsed.saving ? (
               <div className="rounded border border-gray-200 dark:border-gray-700">
                 {catList('saving')}
@@ -478,6 +564,44 @@ export default function FinancialAnalysis() {
       </Card>
 
       <Card title={(t('yearlyBreakdown') || 'Desglose anual') + ' (%)'}>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {detailView && (
+              <button
+                onClick={() => setDetailView(null)}
+                className="h-8 px-3 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                ← Volver a vista general
+              </button>
+            )}
+          </div>
+          {!detailView && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <span>Ver en detalle:</span>
+              <button
+                onClick={() => setDetailView('fixed')}
+                className="px-3 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-sm"
+                disabled={!config.fixed || config.fixed.length === 0}
+              >
+                Fijo
+              </button>
+              <button
+                onClick={() => setDetailView('wellbeing')}
+                className="px-3 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 text-sm"
+                disabled={!config.wellbeing || config.wellbeing.length === 0}
+              >
+                Bienestar
+              </button>
+              <button
+                onClick={() => setDetailView('saving')}
+                className="px-3 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-sm"
+                disabled={!config.saving || config.saving.length === 0}
+              >
+                Ahorro
+              </button>
+            </div>
+          )}
+        </div>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={series} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -485,25 +609,75 @@ export default function FinancialAnalysis() {
             <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
             <Tooltip formatter={(v) => `${formatNumber(Number(v), 2)}%`} />
             <Legend />
-            <Line type="monotone" dataKey="fixed" name={t('fixedExpense') || 'Gasto fijo'} stroke="#60a5fa" strokeWidth={2} />
-            <Line type="monotone" dataKey="wellbeing" name={t('wellbeing') || 'Bienestar'} stroke="#34d399" strokeWidth={2} />
-            <Line type="monotone" dataKey="saving" name={t('saving') || 'Ahorro'} stroke="#f59e0b" strokeWidth={2} />
+            {detailView ? (
+              // Mostrar cada categoría del bucket seleccionado
+              (() => {
+                const bucketCategories = config[detailView] || [];
+                const colors = ['#60a5fa', '#34d399', '#f59e0b', '#a78bfa', '#f472b6', '#fb923c', '#22d3ee', '#84cc16'];
+                return bucketCategories.map((cat, index) => (
+                  <Line
+                    key={cat}
+                    type="monotone"
+                    dataKey={cat}
+                    name={capitalizeWords(cat)}
+                    stroke={colors[index % colors.length]}
+                    strokeWidth={2}
+                  />
+                ));
+              })()
+            ) : (
+              // Vista general: mostrar los 3 buckets
+              <>
+                <Line type="monotone" dataKey="fixed" name={t('fixedExpense') || 'Gasto fijo'} stroke="#60a5fa" strokeWidth={2} />
+                <Line type="monotone" dataKey="wellbeing" name={t('wellbeing') || 'Bienestar'} stroke="#34d399" strokeWidth={2} />
+                <Line type="monotone" dataKey="saving" name={t('saving') || 'Ahorro'} stroke="#f59e0b" strokeWidth={2} />
+              </>
+            )}
           </LineChart>
         </ResponsiveContainer>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
-            <div className="font-semibold">{t('fixedExpense') || 'Gasto fijo'}: <span className="text-blue-600 dark:text-blue-400">{formatNumber(current.fixed, 2)}%</span></div>
-            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.fixed > 0 ? '+' : ''}{formatNumber(deviation.fixed, 2)}%</div>
+        {detailView ? (
+          // Vista detallada: mostrar cada categoría del bucket
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold mb-3">
+              {detailView === 'fixed' ? (t('fixedExpense') || 'Gasto fijo') :
+               detailView === 'wellbeing' ? (t('wellbeing') || 'Bienestar') :
+               (t('saving') || 'Ahorro')} - Detalle por Categoría
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+              {(config[detailView] || []).map((cat, index) => {
+                const colors = ['#60a5fa', '#34d399', '#f59e0b', '#a78bfa', '#f472b6', '#fb923c', '#22d3ee', '#84cc16'];
+                const color = colors[index % colors.length];
+                const catValue = current[cat] || 0;
+                return (
+                  <div key={cat} className="rounded-lg p-3 border-2" style={{ borderColor: color, backgroundColor: `${color}15` }}>
+                    <div className="font-semibold" style={{ color }}>
+                      {capitalizeWords(cat)}: <span style={{ color }}>{formatNumber(catValue, 2)}%</span>
+                    </div>
+                    <div className="text-[#616f89] dark:text-gray-400 text-xs mt-1">
+                      Año {currentYear}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="rounded-lg p-3 bg-green-50 dark:bg-green-900/20">
-            <div className="font-semibold">{t('wellbeing') || 'Bienestar'}: <span className="text-green-600 dark:text-green-400">{formatNumber(current.wellbeing, 2)}%</span></div>
-            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.wellbeing > 0 ? '+' : ''}{formatNumber(deviation.wellbeing, 2)}%</div>
+        ) : (
+          // Vista general: mostrar los 3 buckets
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
+              <div className="font-semibold">{t('fixedExpense') || 'Gasto fijo'}: <span className="text-blue-600 dark:text-blue-400">{formatNumber(current.fixed, 2)}%</span></div>
+              <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.fixed > 0 ? '+' : ''}{formatNumber(deviation.fixed, 2)}%</div>
+            </div>
+            <div className="rounded-lg p-3 bg-green-50 dark:bg-green-900/20">
+              <div className="font-semibold">{t('wellbeing') || 'Bienestar'}: <span className="text-green-600 dark:text-green-400">{formatNumber(current.wellbeing, 2)}%</span></div>
+              <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.wellbeing > 0 ? '+' : ''}{formatNumber(deviation.wellbeing, 2)}%</div>
+            </div>
+            <div className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20">
+              <div className="font-semibold">{t('saving') || 'Ahorro'}: <span className="text-amber-600 dark:text-amber-400">{formatNumber(current.saving, 2)}%</span></div>
+              <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.saving > 0 ? '+' : ''}{formatNumber(deviation.saving, 2)}%</div>
+            </div>
           </div>
-          <div className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20">
-            <div className="font-semibold">{t('saving') || 'Ahorro'}: <span className="text-amber-600 dark:text-amber-400">{formatNumber(current.saving, 2)}%</span></div>
-            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.saving > 0 ? '+' : ''}{formatNumber(deviation.saving, 2)}%</div>
-          </div>
-        </div>
+        )}
       </Card>
     </div>
   );

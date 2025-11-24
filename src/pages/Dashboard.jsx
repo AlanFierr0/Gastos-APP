@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [operations, setOperations] = useState({}); // { investmentId: [operations] }
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getLastNonForecastMonth());
+  const [gbpPrice, setGbpPrice] = useState(null);
   const navigate = useNavigate();
   
   // Calculate current month on each render to ensure it's always fresh
@@ -233,7 +234,31 @@ export default function Dashboard() {
       }
     }
     loadInvestments();
+    loadGbpPrice();
   }, []);
+
+  async function loadGbpPrice() {
+    try {
+      // Intentar con diferentes símbolos posibles
+      let price = await api.getPrice('GBPUSD=X');
+      
+      // Si no funciona, intentar sin el =X
+      if (!price || price <= 0) {
+        price = await api.getPrice('GBPUSD');
+      }
+      
+      // Si aún no funciona, intentar con otro formato
+      if (!price || price <= 0) {
+        price = await api.getPrice('GBP/USD');
+      }
+      
+      if (price && price > 0) {
+        setGbpPrice(price);
+      }
+    } catch (error) {
+      console.error('Error loading GBP price:', error);
+    }
+  }
 
   useEffect(() => {
     if (investments.length > 0) {
@@ -285,19 +310,49 @@ export default function Dashboard() {
 
     investments.forEach(inv => {
       const typeName = inv.category?.type?.name?.toLowerCase() || '';
+      
+      // Aplicar transformaciones X100 y GBP para equity
+      let displayPrice = inv.currentPrice || 0;
+      let displayOriginalAmount = inv.originalAmount || 0;
+      
+      if (typeName === 'equity') {
+        // Aplicar X100: dividir precio por 100
+        if (inv.x100) {
+          displayPrice = displayPrice / 100;
+        }
+        
+        // Aplicar GBP: convertir a dólares
+        if (inv.gbp && gbpPrice) {
+          displayPrice = displayPrice * gbpPrice;
+          displayOriginalAmount = displayOriginalAmount * gbpPrice;
+        }
+      }
+      
       // Para dólar, el valor actual es simplemente la cantidad (no se multiplica por precio)
-      // Para crypto y equity, se multiplica cantidad por precio
+      // Para crypto y equity, se multiplica cantidad por precio (ya transformado)
       const currentValue = typeName === 'dolar' 
         ? (inv.currentAmount || 0)
-        : (inv.currentAmount || 0) * (inv.currentPrice || 0);
+        : (inv.currentAmount || 0) * displayPrice;
       
       // Calcular costo total: inversión original + suma de precios de operaciones de compra
       const invOperations = operations[inv.id] || [];
       totalOperationsCount += invOperations.length;
       const purchaseCost = invOperations
         .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
-        .reduce((total, op) => total + (op.price * op.amount), 0);
-      const costBasis = (inv.originalAmount || 0) + purchaseCost;
+        .reduce((total, op) => {
+          let opPrice = op.price;
+          // Aplicar misma lógica a precios de operaciones
+          if (typeName === 'equity') {
+            if (inv.x100) {
+              opPrice = opPrice / 100;
+            }
+            if (inv.gbp && gbpPrice) {
+              opPrice = opPrice * gbpPrice;
+            }
+          }
+          return total + (opPrice * op.amount);
+        }, 0);
+      const costBasis = displayOriginalAmount + purchaseCost;
       const gain = currentValue - costBasis;
 
       totalCurrent += currentValue;
@@ -323,12 +378,12 @@ export default function Dashboard() {
       totalOperations: totalOperationsCount,
       byType,
     };
-  }, [investments, operations]);
+  }, [investments, operations, gbpPrice]);
 
   // Datos para el gráfico de distribución por tipo
   // Siempre mostrar los tres tipos: Crypto, Equity y Dólar
   const investmentPieData = useMemo(() => {
-    const data = [
+    return [
       {
         name: 'Crypto',
         value: investmentMetrics.byType.crypto.current,
@@ -351,7 +406,6 @@ export default function Dashboard() {
         count: investmentMetrics.byType.dolar.count,
       },
     ];
-    return data;
   }, [investmentMetrics]);
 
   return (

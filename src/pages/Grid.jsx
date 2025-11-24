@@ -45,6 +45,10 @@ export default function Grid() {
   const [editingDetail, setEditingDetail] = useState(null); // { recordId, monthKey, gridType, value }
   const [selectedYear, setSelectedYear] = useState(null); // null = all years, or specific year number
   const [showForecast, setShowForecast] = useState(false); // Toggle para mostrar/ocultar forecast
+  const [cellEditModal, setCellEditModal] = useState(null); // { rowIndex, monthKey, gridType, records, currentTotal, rowKey }
+  const [modalValue, setModalValue] = useState(''); // Valor único para todas las operaciones
+  const [modalNote, setModalNote] = useState('');
+  const [modalAction, setModalAction] = useState(null); // 'edit', 'add', 'subtract', o null
   const gridRef = useRef(null);
   const inputRef = useRef(null);
   const lastEditingKeyRef = useRef(null);
@@ -266,12 +270,34 @@ export default function Grid() {
   };
 
   const handleCellDoubleClick = (rowIndex, monthKey, gridType, isTotal = false) => {
-    // Don't allow editing totals or category totals
-    // Category totals are read-only, users can only edit individual records in the expanded details view
-    // This function intentionally does nothing - editing is handled elsewhere
     if (isTotal) {
-      // No action needed for totals
+      return; // Don't allow editing totals
     }
+
+    const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
+    const row = gridData[rowIndex];
+    
+    if (!row) return;
+
+    const records = row.monthData[monthKey] || [];
+    const currentTotal = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    
+    // Get note from first record if exists, or empty string
+    const firstRecord = records[0];
+    const note = firstRecord?.note || '';
+
+    setCellEditModal({
+      rowIndex,
+      monthKey,
+      gridType,
+      records,
+      currentTotal,
+      rowKey: row.key,
+    });
+    // Inicializar con valor vacío para que el usuario ingrese el valor
+    setModalValue('');
+    setModalNote(note);
+    setModalAction(null); // Reset action
   };
 
   const handleSave = async () => {
@@ -362,6 +388,133 @@ export default function Grid() {
       // Empty cell - allow editing to create new record
       setEditingDetail({ recordId: null, monthKey, gridType, value: '', conceptLabel, categoryName });
     }
+  };
+
+  const handleCellModalSave = async () => {
+    if (!cellEditModal || !modalAction) return;
+
+    const { rowIndex, monthKey, gridType, records, rowKey } = cellEditModal;
+    const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
+    const row = gridData[rowIndex];
+    
+    if (!row) return;
+
+    try {
+      const currentTotal = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+      let newAmount = currentTotal;
+      let hasValueChange = false;
+
+      // Parsear el valor ingresado
+      const cleanValue = String(modalValue).replace(/\./g, '').replace(',', '.');
+      const inputValue = parseFloat(cleanValue);
+      
+      if (!isNaN(inputValue) && inputValue !== 0) {
+        hasValueChange = true;
+
+        if (modalAction === 'edit') {
+          // Editar: establecer el valor directamente al valor ingresado
+          newAmount = inputValue;
+        } else if (modalAction === 'add') {
+          // Sumar: valor actual + valor ingresado
+          newAmount = currentTotal + inputValue;
+        } else if (modalAction === 'subtract') {
+          // Restar: valor actual - valor ingresado
+          newAmount = currentTotal - inputValue;
+        }
+      }
+
+      // Si no hay cambio de valor ni de nota, cerrar
+      if (!hasValueChange && modalNote === (records[0]?.note || '')) {
+        setCellEditModal(null);
+        setModalValue('');
+        setModalNote('');
+        setModalAction(null);
+        return;
+      }
+
+      // Calcular la diferencia para aplicar al registro (solo si hay cambio de valor)
+      const difference = hasValueChange ? (newAmount - currentTotal) : 0;
+
+      // Update first record or create new one
+      if (records.length > 0) {
+        const record = records[0];
+        const updates = {};
+        
+        if (hasValueChange) {
+          updates.amount = Number(record.amount || 0) + difference;
+        }
+        
+        if (modalNote !== (record.note || '')) {
+          updates.note = modalNote.trim() || undefined;
+        }
+        
+        // Solo actualizar si hay cambios
+        if (Object.keys(updates).length > 0) {
+          if (gridType === 'expense') {
+            await updateExpense(record.id, updates);
+          } else {
+            await updateIncome(record.id, updates);
+          }
+        }
+      } else if (hasValueChange) {
+        // Create new record (solo si hay cambio de valor)
+        const [year, month] = monthKey.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0)).toISOString();
+        
+        const category = categories?.find(c => c.name?.toLowerCase() === rowKey.toLowerCase());
+        const categoryId = category?.id;
+
+        if (gridType === 'expense') {
+          await addExpense({
+            categoryId,
+            categoryName: rowKey.toLowerCase(),
+            concept: rowKey,
+            amount: newAmount,
+            date,
+            note: modalNote.trim() || undefined,
+          });
+        } else {
+          await addIncome({
+            concept: rowKey,
+            categoryName: rowKey,
+            amount: newAmount,
+            date,
+            note: modalNote.trim() || undefined,
+          });
+        }
+      } else if (modalNote !== (records[0]?.note || '')) {
+        // Solo actualizar nota si no hay registros pero hay nota
+        // Esto no debería pasar normalmente, pero por si acaso
+      }
+    } catch (error) {
+      console.error('Error saving:', error);
+    } finally {
+      setCellEditModal(null);
+      setModalValue('');
+      setModalNote('');
+      setModalAction(null);
+    }
+  };
+
+  // Calcular el valor resultante según la acción seleccionada
+  const calculateResultValue = () => {
+    if (!cellEditModal || !modalAction) return null;
+    
+    const currentTotal = cellEditModal.currentTotal;
+    const cleanValue = String(modalValue).replace(/\./g, '').replace(',', '.');
+    const inputValue = parseFloat(cleanValue);
+    
+    if (isNaN(inputValue) || inputValue === 0) return null;
+    
+    if (modalAction === 'edit') {
+      return inputValue;
+    } else if (modalAction === 'add') {
+      return currentTotal + inputValue;
+    } else if (modalAction === 'subtract') {
+      return currentTotal - inputValue;
+    }
+    
+    return null;
   };
 
   const handleDetailSave = async () => {
@@ -883,6 +1036,143 @@ export default function Grid() {
 
       {renderGrid(expensesGridData, expensesRowTotals, expensesMonthTotals, 'expense', t('expenses') || 'Gastos')}
       {renderGrid(incomeGridData, incomeRowTotals, incomeMonthTotals, 'income', t('income') || 'Ingresos')}
+
+      {/* Cell Edit Modal */}
+      {cellEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setCellEditModal(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Editar Celda
+                </h3>
+                <button
+                  onClick={() => setCellEditModal(null)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <span className="material-symbols-outlined text-2xl">close</span>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <span className="font-semibold">Categoría:</span> {capitalizeWords(cellEditModal.rowKey)}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <span className="font-semibold">Mes:</span> {cellEditModal.monthKey}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    <span className="font-semibold">Valor Actual:</span> {formatMoneyNoDecimals(cellEditModal.currentTotal, 'ARS', { sign: 'auto' })}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Valor</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={modalValue}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^0-9,.-]/g, '');
+                      const normalized = cleaned.replace('.', ',');
+                      setModalValue(normalized);
+                    }}
+                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: 1000,50"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalAction('edit')}
+                    className={`h-9 px-4 rounded-lg text-white text-sm font-medium transition-colors ${
+                      modalAction === 'edit' 
+                        ? 'bg-blue-700 dark:bg-blue-800 ring-2 ring-blue-500' 
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalAction('add')}
+                    className={`h-9 px-4 rounded-lg text-white text-sm font-medium transition-colors ${
+                      modalAction === 'add' 
+                        ? 'bg-green-700 dark:bg-green-800 ring-2 ring-green-500' 
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                  >
+                    Sumar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalAction('subtract')}
+                    className={`h-9 px-4 rounded-lg text-white text-sm font-medium transition-colors ${
+                      modalAction === 'subtract' 
+                        ? 'bg-red-700 dark:bg-red-800 ring-2 ring-red-500' 
+                        : 'bg-red-600 hover:bg-red-700'
+                    }`}
+                  >
+                    Restar
+                  </button>
+                </div>
+
+                {/* Mostrar resultado previo */}
+                {modalAction && calculateResultValue() !== null && (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      {modalAction === 'edit' ? 'Nuevo valor:' : 
+                       modalAction === 'add' ? 'Valor resultante (actual + ingresado):' : 
+                       'Valor resultante (actual - ingresado):'}
+                    </p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      {formatMoneyNoDecimals(calculateResultValue(), 'ARS', { sign: 'auto' })}
+                    </p>
+                  </div>
+                )}
+
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <label className="block text-sm font-medium mb-1">Nota</label>
+                  <textarea
+                    value={modalNote}
+                    onChange={(e) => setModalNote(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Agregar nota..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCellEditModal(null);
+                      setModalValue('');
+                      setModalNote('');
+                      setModalAction(null);
+                    }}
+                    className="flex-1 h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCellModalSave}
+                    disabled={!modalAction}
+                    className="flex-1 h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
