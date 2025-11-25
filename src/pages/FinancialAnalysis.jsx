@@ -403,12 +403,12 @@ export default function FinancialAnalysis() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 
+            <h3 
                 className={`font-semibold ${collapsed.fixed ? 'cursor-pointer hover:text-primary' : ''}`}
-                onClick={collapsed.fixed ? () => setCollapsed((s) => ({ ...s, fixed: false })) : undefined}
-              >
-                {t('fixedExpense') || 'Gasto fijo'}
-              </h3>
+              onClick={collapsed.fixed ? () => setCollapsed((s) => ({ ...s, fixed: false })) : undefined}
+            >
+              {t('fixedExpense') || 'Gasto fijo'}
+            </h3>
               {config.fixed && config.fixed.length > 0 && (
                 <button
                   onClick={() => setDetailView('fixed')}
@@ -456,12 +456,12 @@ export default function FinancialAnalysis() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 
+            <h3 
                 className={`font-semibold ${collapsed.wellbeing ? 'cursor-pointer hover:text-primary' : ''}`}
-                onClick={collapsed.wellbeing ? () => setCollapsed((s) => ({ ...s, wellbeing: false })) : undefined}
-              >
-                {t('wellbeing') || 'Bienestar'}
-              </h3>
+              onClick={collapsed.wellbeing ? () => setCollapsed((s) => ({ ...s, wellbeing: false })) : undefined}
+            >
+              {t('wellbeing') || 'Bienestar'}
+            </h3>
               {config.wellbeing && config.wellbeing.length > 0 && (
                 <button
                   onClick={() => setDetailView('wellbeing')}
@@ -509,12 +509,12 @@ export default function FinancialAnalysis() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 
+            <h3 
                 className={`font-semibold ${collapsed.saving ? 'cursor-pointer hover:text-primary' : ''}`}
-                onClick={collapsed.saving ? () => setCollapsed((s) => ({ ...s, saving: false })) : undefined}
-              >
-                {t('saving') || 'Ahorro'}
-              </h3>
+              onClick={collapsed.saving ? () => setCollapsed((s) => ({ ...s, saving: false })) : undefined}
+            >
+              {t('saving') || 'Ahorro'}
+            </h3>
               {config.saving && config.saving.length > 0 && (
                 <button
                   onClick={() => setDetailView('saving')}
@@ -628,9 +628,9 @@ export default function FinancialAnalysis() {
             ) : (
               // Vista general: mostrar los 3 buckets
               <>
-                <Line type="monotone" dataKey="fixed" name={t('fixedExpense') || 'Gasto fijo'} stroke="#60a5fa" strokeWidth={2} />
-                <Line type="monotone" dataKey="wellbeing" name={t('wellbeing') || 'Bienestar'} stroke="#34d399" strokeWidth={2} />
-                <Line type="monotone" dataKey="saving" name={t('saving') || 'Ahorro'} stroke="#f59e0b" strokeWidth={2} />
+            <Line type="monotone" dataKey="fixed" name={t('fixedExpense') || 'Gasto fijo'} stroke="#60a5fa" strokeWidth={2} />
+            <Line type="monotone" dataKey="wellbeing" name={t('wellbeing') || 'Bienestar'} stroke="#34d399" strokeWidth={2} />
+            <Line type="monotone" dataKey="saving" name={t('saving') || 'Ahorro'} stroke="#f59e0b" strokeWidth={2} />
               </>
             )}
           </LineChart>
@@ -668,20 +668,20 @@ export default function FinancialAnalysis() {
           </div>
         ) : (
           // Vista general: mostrar los 3 buckets
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-            <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
-              <div className="font-semibold">{t('fixedExpense') || 'Gasto fijo'}: <span className="text-blue-600 dark:text-blue-400">{formatNumber(current.fixed, 2)}%</span></div>
-              <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.fixed > 0 ? '+' : ''}{formatNumber(deviation.fixed, 2)}%</div>
-            </div>
-            <div className="rounded-lg p-3 bg-green-50 dark:bg-green-900/20">
-              <div className="font-semibold">{t('wellbeing') || 'Bienestar'}: <span className="text-green-600 dark:text-green-400">{formatNumber(current.wellbeing, 2)}%</span></div>
-              <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.wellbeing > 0 ? '+' : ''}{formatNumber(deviation.wellbeing, 2)}%</div>
-            </div>
-            <div className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20">
-              <div className="font-semibold">{t('saving') || 'Ahorro'}: <span className="text-amber-600 dark:text-amber-400">{formatNumber(current.saving, 2)}%</span></div>
-              <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.saving > 0 ? '+' : ''}{formatNumber(deviation.saving, 2)}%</div>
-            </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
+            <div className="font-semibold">{t('fixedExpense') || 'Gasto fijo'}: <span className="text-blue-600 dark:text-blue-400">{formatNumber(current.fixed, 2)}%</span></div>
+            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.fixed > 0 ? '+' : ''}{formatNumber(deviation.fixed, 2)}%</div>
           </div>
+          <div className="rounded-lg p-3 bg-green-50 dark:bg-green-900/20">
+            <div className="font-semibold">{t('wellbeing') || 'Bienestar'}: <span className="text-green-600 dark:text-green-400">{formatNumber(current.wellbeing, 2)}%</span></div>
+            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.wellbeing > 0 ? '+' : ''}{formatNumber(deviation.wellbeing, 2)}%</div>
+          </div>
+          <div className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20">
+            <div className="font-semibold">{t('saving') || 'Ahorro'}: <span className="text-amber-600 dark:text-amber-400">{formatNumber(current.saving, 2)}%</span></div>
+            <div className="text-[#616f89] dark:text-gray-400">{t('currentYearDeviation') || 'Desvío año actual'}: {deviation.saving > 0 ? '+' : ''}{formatNumber(deviation.saving, 2)}%</div>
+          </div>
+        </div>
         )}
       </Card>
     </div>

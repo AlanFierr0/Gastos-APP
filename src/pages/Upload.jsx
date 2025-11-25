@@ -7,7 +7,7 @@ import * as api from '../api/index.js';
 import CustomSelect from '../components/CustomSelect.jsx';
 
 export default function Upload() {
-  const { t, refreshExpenses, refreshIncome, categories } = useApp();
+  const { t, refreshExpenses, refreshIncome, categories, expenses } = useApp();
   const { register, handleSubmit, reset, watch } = useForm();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -258,10 +258,38 @@ export default function Upload() {
   const [editingMonthlyRecord, setEditingMonthlyRecord] = useState(null);
   const [failedSections, setFailedSections] = useState([]); // Array de { index, title, content, error }
   const [allSections, setAllSections] = useState([]); // Guardar todas las secciones para poder reanalizar
+  const [monthlySummaryYear, setMonthlySummaryYear] = useState(new Date().getFullYear());
+  const [monthlySummaryMonth, setMonthlySummaryMonth] = useState(new Date().getMonth() + 1);
+  const [selectedBank, setSelectedBank] = useState(null); // { categoryId, concept }
+  
+  // Obtener conceptos únicos de la categoría "mantenimiento bancos"
+  const bankConcepts = useMemo(() => {
+    const bankCategory = categories.find(cat => 
+      cat.name.toLowerCase() === 'mantenimiento bancos' || 
+      cat.name.toLowerCase() === 'mantenimiento banco'
+    );
+    
+    if (!bankCategory) return [];
+    
+    // Buscar todos los conceptos únicos (expenses) que pertenecen a esta categoría
+    const bankExpenses = expenses.filter(exp => exp.categoryId === bankCategory.id);
+    const uniqueConcepts = [...new Set(bankExpenses.map(exp => exp.concept).filter(Boolean))];
+    
+    return uniqueConcepts.map(concept => ({
+      concept,
+      categoryId: bankCategory.id,
+      categoryName: bankCategory.name,
+    }));
+  }, [categories, expenses]);
 
   const handleLoadMonthlySummary = async () => {
     if (!monthlySummaryFile) {
       setStatus('Por favor selecciona un archivo PDF');
+      return;
+    }
+    
+    if (!selectedBank) {
+      setStatus('Por favor selecciona un banco antes de procesar');
       return;
     }
 
@@ -298,7 +326,8 @@ export default function Upload() {
 
           const result = await api.processMonthlySummarySection(
             section.content,
-            section.title
+            section.title,
+            selectedBank
           );
 
           if (result.records && Array.isArray(result.records)) {
@@ -422,6 +451,17 @@ export default function Upload() {
     setEditingMonthlyRecord(null);
   };
 
+  const handleRemoveMonthlyRecord = (index) => {
+    if (!monthlySummaryResults) return;
+    const updated = monthlySummaryResults.records.filter((_, i) => i !== index);
+    setMonthlySummaryResults({ ...monthlySummaryResults, records: updated });
+    if (editingMonthlyRecord === index) {
+      setEditingMonthlyRecord(null);
+    } else if (editingMonthlyRecord > index) {
+      setEditingMonthlyRecord(editingMonthlyRecord - 1);
+    }
+  };
+
   const handleConfirmMonthlyImport = async () => {
     if (!monthlySummaryResults || !monthlySummaryResults.records || monthlySummaryResults.records.length === 0) {
       setStatus('No hay registros para importar');
@@ -431,8 +471,8 @@ export default function Upload() {
     setLoading(true);
     setStatus('Importando registros...');
     try {
-      // Filtrar solo los registros que tienen categoryId (mapeados correctamente)
-      const unmappedRecords = monthlySummaryResults.records.filter(r => !r.categoryId || r.needsManualMapping);
+      // Filtrar solo los registros que necesitan mapeo (no se pueden importar sin concepto)
+      const unmappedRecords = monthlySummaryResults.records.filter(r => r.mappingStatus === 'needs_mapping' || !r.categoryId || !r.concept);
 
       if (unmappedRecords.length > 0) {
         setStatus(`Hay ${unmappedRecords.length} registros que requieren mapeo manual. Por favor, completa la información antes de importar.`);
@@ -440,16 +480,28 @@ export default function Upload() {
         return;
       }
 
-      // Convertir a formato de confirmImport
-      const recordsToImport = monthlySummaryResults.records.map(r => ({
-        kind: r.kind,
-        categoria: r.categoryName || categories.find(c => c.id === r.categoryId)?.name || '',
-        nombre: r.concept || '',
-        amount: r.amount || 0,
-        date: r.date || new Date().toISOString(),
-        currency: r.currency || 'ARS',
-        nota: r.note || '',
-      }));
+      // Convertir a formato de confirmImport y aplicar fecha seleccionada
+      const recordsToImport = monthlySummaryResults.records.map(r => {
+        // Crear fecha con el año y mes seleccionados
+        const selectedDate = new Date(monthlySummaryYear, monthlySummaryMonth - 1, 1);
+        // Si el registro tiene una fecha original, usar el día de esa fecha, sino usar día 1
+        let day = 1;
+        if (r.date) {
+          const originalDate = new Date(r.date);
+          day = originalDate.getDate();
+        }
+        selectedDate.setDate(day);
+        
+        return {
+          kind: r.kind,
+          categoria: r.categoryName || categories.find(c => c.id === r.categoryId)?.name || '',
+          nombre: r.concept || '',
+          amount: r.amount || 0,
+          date: selectedDate.toISOString(),
+          currency: r.currency || 'ARS',
+          nota: r.note || '',
+        };
+      });
 
       const result = await api.confirmImport(recordsToImport, {});
       setStatus(result.message || 'Importación completada exitosamente');
@@ -575,7 +627,7 @@ export default function Upload() {
 
 
   return (
-    <div className={`flex flex-col gap-6 ${previewData ? 'w-full max-w-full' : 'max-w-6xl'}`}>
+    <div className="flex flex-col gap-6">
       <header>
         <p className="text-4xl font-black tracking-[-0.033em]">{t('uploadTitle')}</p>
         <p className="text-[#616f89] dark:text-gray-400">{t('uploadSubtitle')}</p>
@@ -640,6 +692,34 @@ export default function Upload() {
                       </p>
                     )}
                   </div>
+                  
+                  {bankConcepts.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Banco <span className="text-red-500">*</span>
+                      </label>
+                      <CustomSelect
+                        value={selectedBank?.concept || ''}
+                        onChange={(value) => {
+                          const bank = bankConcepts.find(b => b.concept === value);
+                          setSelectedBank(bank || null);
+                        }}
+                        options={[
+                          { value: '', label: 'Seleccione un banco...' },
+                          ...bankConcepts.map(bank => ({
+                            value: bank.concept,
+                            label: capitalizeWords(bank.concept),
+                          })),
+                        ]}
+                        disabled={loading}
+                      />
+                      {!selectedBank && (
+                        <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                          Debe seleccionar un banco antes de procesar
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-3 justify-end">
                     <button 
@@ -654,7 +734,7 @@ export default function Upload() {
                     </button>
                     <button 
                       onClick={handleLoadMonthlySummary}
-                      disabled={loading || !monthlySummaryFile}
+                      disabled={loading || !monthlySummaryFile || !selectedBank}
                       className="h-12 px-5 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-50 hover:bg-indigo-700"
                     >
                       {loading ? 'Procesando...' : 'Procesar con IA'}
@@ -931,11 +1011,52 @@ export default function Upload() {
                 Revisa y completa la información de los registros. Los que requieren mapeo manual deben ser editados antes de importar.
               </p>
             </div>
-            <div className="mb-4">
+            <div className="mb-4 flex items-center gap-4 flex-wrap">
               <p className="text-sm">
                 <strong>Total registros:</strong> {monthlySummaryResults.records.length} | 
-                <strong className="ml-2">Requieren mapeo manual:</strong> {monthlySummaryResults.records.filter(r => r.needsManualMapping || !r.categoryId).length}
+                <strong className="ml-2 text-green-600 dark:text-green-400">Listos:</strong> {monthlySummaryResults.records.filter(r => r.mappingStatus === 'ready').length} | 
+                <strong className="ml-2 text-yellow-600 dark:text-yellow-400">Necesitan confirmación:</strong> {monthlySummaryResults.records.filter(r => r.mappingStatus === 'needs_confirmation').length} | 
+                <strong className="ml-2 text-red-600 dark:text-red-400">Necesitan mapeo:</strong> {monthlySummaryResults.records.filter(r => r.mappingStatus === 'needs_mapping' || !r.categoryId || !r.concept).length}
               </p>
+              <div className="flex items-center gap-2">
+                <label htmlFor="monthly-year-select" className="text-sm font-semibold">
+                  Año:
+                </label>
+                <CustomSelect
+                  id="monthly-year-select"
+                  value={String(monthlySummaryYear)}
+                  onChange={(v) => setMonthlySummaryYear(Number(v))}
+                  options={Array.from({ length: 2100 - 1980 + 1 }, (_, i) => {
+                    const year = 1980 + i;
+                    return { value: String(year), label: String(year) };
+                  })}
+                />
+                <label htmlFor="monthly-month-select" className="text-sm font-semibold ml-2">
+                  Mes:
+                </label>
+                <CustomSelect
+                  id="monthly-month-select"
+                  value={String(monthlySummaryMonth)}
+                  onChange={(v) => setMonthlySummaryMonth(Number(v))}
+                  options={[
+                    { value: '1', label: 'Enero' },
+                    { value: '2', label: 'Febrero' },
+                    { value: '3', label: 'Marzo' },
+                    { value: '4', label: 'Abril' },
+                    { value: '5', label: 'Mayo' },
+                    { value: '6', label: 'Junio' },
+                    { value: '7', label: 'Julio' },
+                    { value: '8', label: 'Agosto' },
+                    { value: '9', label: 'Septiembre' },
+                    { value: '10', label: 'Octubre' },
+                    { value: '11', label: 'Noviembre' },
+                    { value: '12', label: 'Diciembre' },
+                  ]}
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Todas las fechas se ajustarán a este año/mes
+                </p>
+              </div>
             </div>
           </Card>
 
@@ -949,19 +1070,26 @@ export default function Upload() {
                       <th className="text-left p-2">Categoría</th>
                       <th className="text-left p-2">Concepto</th>
                       <th className="text-right p-2">Monto</th>
-                      <th className="text-left p-2">Fecha</th>
+                      <th className="text-left p-2">Texto Original</th>
                       <th className="text-left p-2">Estado</th>
                       <th className="text-left p-2">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {monthlySummaryResults.records.map((record, index) => {
-                      const needsMapping = record.needsManualMapping || !record.categoryId;
+                      const mappingStatus = record.mappingStatus || (record.needsManualMapping ? 'needs_mapping' : (!record.categoryId || !record.concept ? 'needs_mapping' : 'ready'));
+                      const needsMapping = mappingStatus === 'needs_mapping';
+                      const needsConfirmation = mappingStatus === 'needs_confirmation';
+                      const isReady = mappingStatus === 'ready';
                       const category = categories.find(c => c.id === record.categoryId);
                       return (
-                        <tr key={index} className={`border-b border-gray-100 dark:border-gray-800 ${needsMapping ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
-                          <td className="py-2 px-3">{record.kind === 'income' ? 'Ingreso' : 'Gasto'}</td>
-                          <td className="py-2 px-3">
+                        <tr key={index} className={`border-b border-gray-100 dark:border-gray-800 ${
+                          needsMapping ? 'bg-red-50 dark:bg-red-900/20' : 
+                          needsConfirmation ? 'bg-yellow-50 dark:bg-yellow-900/20' : 
+                          'bg-white dark:bg-gray-900'
+                        }`}>
+                          <td className="py-2 px-3 whitespace-nowrap">{record.kind === 'income' ? 'Ingreso' : 'Gasto'}</td>
+                          <td className="py-2 px-3 break-words">
                             {editingMonthlyRecord === index ? (
                               <CustomSelect
                                 value={record.categoryId || ''}
@@ -971,7 +1099,7 @@ export default function Upload() {
                                     ...record,
                                     categoryId: v,
                                     categoryName: selectedCat?.name || record.categoryName,
-                                    needsManualMapping: false,
+                                    mappingStatus: 'ready',
                                   });
                                 }}
                                 options={[
@@ -988,7 +1116,7 @@ export default function Upload() {
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-3">
+                          <td className="py-2 px-3 break-words">
                             {editingMonthlyRecord === index ? (
                               <input
                                 type="text"
@@ -1000,39 +1128,64 @@ export default function Upload() {
                               record.concept || '-'
                             )}
                           </td>
-                          <td className="text-right py-2 px-3">
+                          <td className="text-right py-2 px-3 whitespace-nowrap">
                             {formatMoneyNoDecimals(record.amount || 0, record.currency || 'ARS', { sign: 'auto' })}
                           </td>
-                          <td className="py-2 px-3">
-                            {record.date ? formatDate(record.date) : '-'}
+                          <td className="py-2 px-3 text-xs text-gray-600 dark:text-gray-400">
+                            <div className="break-words" title={record.originalText || ''}>
+                              {record.originalText || '-'}
+                            </div>
                           </td>
-                          <td className="py-2 px-3">
+                          <td className="py-2 px-3 whitespace-nowrap">
                             {needsMapping ? (
-                              <span className="px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs">
-                                Requiere mapeo
+                              <span className="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 text-xs font-semibold">
+                                Necesita Mapeo
+                              </span>
+                            ) : needsConfirmation ? (
+                              <span className="px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs font-semibold">
+                                Necesita Confirmación
                               </span>
                             ) : (
-                              <span className="px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-xs">
+                              <span className="px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-xs font-semibold">
                                 Listo
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-3">
-                            {editingMonthlyRecord === index ? (
-                              <button
-                                onClick={() => setEditingMonthlyRecord(null)}
-                                className="px-2 py-1 rounded bg-green-500 text-white text-xs hover:bg-green-600"
-                              >
-                                Guardar
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleEditMonthlyRecord(index)}
-                                className="px-2 py-1 rounded bg-primary/10 text-primary dark:bg-primary/20 text-xs hover:bg-primary/20"
-                              >
-                                Editar
-                              </button>
-                            )}
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            <div className="flex gap-2">
+                              {editingMonthlyRecord === index ? (
+                                <button
+                                  onClick={() => setEditingMonthlyRecord(null)}
+                                  className="px-2 py-1 rounded bg-green-500 text-white text-xs hover:bg-green-600"
+                                >
+                                  Guardar
+                                </button>
+                              ) : (
+                                <>
+                                  {needsConfirmation && (
+                                    <button
+                                      onClick={() => handleSaveMonthlyRecord(index, { ...record, mappingStatus: 'ready' })}
+                                      className="px-2 py-1 rounded bg-green-500 text-white text-xs hover:bg-green-600"
+                                      title="Confirmar mapeo"
+                                    >
+                                      Confirmar
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleEditMonthlyRecord(index)}
+                                    className="px-2 py-1 rounded bg-primary/10 text-primary dark:bg-primary/20 text-xs hover:bg-primary/20"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveMonthlyRecord(index)}
+                                    className="px-2 py-1 rounded bg-red-500/10 text-red-500 dark:bg-red-500/20 text-xs hover:bg-red-500/20"
+                                  >
+                                    Eliminar
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

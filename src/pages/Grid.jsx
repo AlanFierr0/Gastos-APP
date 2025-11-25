@@ -559,7 +559,7 @@ export default function Grid() {
               date,
               note: modalNote.trim() || undefined,
             });
-          }
+    }
         }
       }
     } catch (error) {

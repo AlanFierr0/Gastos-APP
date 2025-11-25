@@ -867,13 +867,13 @@ export default function Investment() {
                   {(() => {
                     const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
                     return hasAnyExpanded ? (
-                      <th className="text-left py-2 px-3 text-sm font-semibold">Entidad de Custodia</th>
+                  <th className="text-left py-2 px-3 text-sm font-semibold">Entidad de Custodia</th>
                     ) : null;
                   })()}
                   {(() => {
                     const hasAnyExpanded = Array.from(expandedConcepts).some(key => key.startsWith(`${typeName}-`));
                     return hasAnyExpanded ? (
-                      <th className="text-center py-2 px-3 text-sm font-semibold">Acciones</th>
+                  <th className="text-center py-2 px-3 text-sm font-semibold">Acciones</th>
                     ) : null;
                   })()}
                 </tr>
@@ -935,7 +935,7 @@ export default function Investment() {
                       const allSame = prices.every(p => Math.abs(p - firstPrice) < 0.01);
                       if (allSame) {
                         conceptPrice = firstPrice;
-                      }
+                    }
                     }
                   }
                   
@@ -999,86 +999,86 @@ export default function Investment() {
                         const displayPrice = inv.currentPrice || 0;
                         const displayAmount = inv.currentAmount || 0;
                         const displayOriginalAmount = inv.originalAmount || 0;
-                        
-                        const currentValue = displayAmount * displayPrice;
-                        const invOperations = operations.filter(op => op.investmentId === inv.id);
-                        const purchaseCost = invOperations
-                          .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
-                          .reduce((total, op) => {
+                  
+                  const currentValue = displayAmount * displayPrice;
+                  const invOperations = operations.filter(op => op.investmentId === inv.id);
+                  const purchaseCost = invOperations
+                    .filter(op => op.type === 'COMPRA' && op.price && op.price > 0)
+                    .reduce((total, op) => {
                             return total + (op.price * op.amount);
-                          }, 0);
-                        const costBasis = displayOriginalAmount + purchaseCost;
-                        const gain = currentValue - costBasis;
-                        const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
+                    }, 0);
+                  const costBasis = displayOriginalAmount + purchaseCost;
+                  const gain = currentValue - costBasis;
+                  const gainPercent = costBasis > 0 ? ((gain / costBasis) * 100) : 0;
                         
-                        return (
+                  return (
                           <tr key={inv.id} className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
                             <td className="py-2 px-3 pl-8">
                               {inv.concept}
                             </td>
                             <td className="text-right py-2 px-3">{formatNumberWithConditionalDecimals(displayAmount)}</td>
-                            {typeName !== 'dolar' && (
+                        {typeName !== 'dolar' && (
                               <td className="text-right py-2 px-3">{displayPrice > 0 ? formatMoneyWithConditionalDecimals(displayPrice, 'ARS', { sign: 'none' }) : '-'}</td>
-                            )}
-                            {(typeName === 'crypto' || typeName === 'equity') && (
-                              <td className="text-right py-2 px-3 font-semibold">
+                        )}
+                        {(typeName === 'crypto' || typeName === 'equity') && (
+                          <td className="text-right py-2 px-3 font-semibold">
                                 {formatMoneyWithConditionalDecimals(currentValue, 'ARS', { sign: 'none' })}
-                              </td>
-                            )}
-                            {typeName !== 'dolar' && (
-                              <td className="text-right py-2 px-3">
+                          </td>
+                        )}
+                        {typeName !== 'dolar' && (
+                          <td className="text-right py-2 px-3">
                                 {formatMoneyWithConditionalDecimals(costBasis, 'ARS', { sign: 'none' })}
-                              </td>
-                            )}
-                            {typeName !== 'dolar' && (
-                              <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          </td>
+                        )}
+                        {typeName !== 'dolar' && (
+                          <td className={`text-right py-2 px-3 ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {formatMoneyWithConditionalDecimals(gain, 'ARS')} ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)
-                              </td>
-                            )}
+                          </td>
+                        )}
                             {typeName !== 'dolar' && hasAnyExpanded && (
-                              <td className="py-2 px-3">{inv.tag || '-'}</td>
-                            )}
+                          <td className="py-2 px-3">{inv.tag || '-'}</td>
+                        )}
                             {typeName !== 'dolar' && hasAnyExpanded && (
                               <td className="py-2 px-3">{inv.sector || '-'}</td>
                             )}
                             {hasAnyExpanded && (
-                              <td className="py-2 px-3">{inv.custodyEntity || '-'}</td>
+                        <td className="py-2 px-3">{inv.custodyEntity || '-'}</td>
                             )}
                             {hasAnyExpanded && (
-                              <td className="text-center py-2 px-3">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
+                        <td className="text-center py-2 px-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
                                     onClick={(e) => { e.stopPropagation(); handleEdit(inv); }}
-                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
-                                    title="Editar"
-                                  >
-                                    Editar
-                                  </button>
-                                  <span className="text-gray-300 dark:text-gray-600">|</span>
-                                  <button
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
+                              title="Editar"
+                            >
+                              Editar
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
                                     onClick={(e) => { e.stopPropagation(); handleDeleteClick(inv); }}
-                                    className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm"
-                                    title="Eliminar"
-                                  >
-                                    Eliminar
-                                  </button>
-                                  <span className="text-gray-300 dark:text-gray-600">|</span>
-                                  <button
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm"
+                              title="Eliminar"
+                            >
+                              Eliminar
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button
                                     onClick={(e) => { e.stopPropagation(); handleAddOperation(inv); }}
-                                    className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-sm"
-                                    title="Agregar Operación"
-                                  >
-                                    Operación
-                                  </button>
-                                </div>
-                              </td>
+                              className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-sm"
+                              title="Agregar Operación"
+                            >
+                              Operación
+                            </button>
+                          </div>
+                        </td>
                             )}
-                          </tr>
+                      </tr>
                         );
                       })}
-                </React.Fragment>
-              );
-            })}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1114,13 +1114,13 @@ export default function Investment() {
                 search
               </span>
               {searchFilter && (
-                <button
+            <button
                   onClick={() => setSearchFilter('')}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   aria-label="Limpiar búsqueda"
                 >
                   <span className="material-symbols-outlined text-lg">close</span>
-                </button>
+            </button>
               )}
             </div>
             <button
@@ -1391,7 +1391,7 @@ export default function Investment() {
                   <span className="material-symbols-outlined text-2xl">close</span>
                 </button>
               </div>
-              <form onSubmit={handleOperationSubmit} className="space-y-4">
+          <form onSubmit={handleOperationSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Inversión *</label>
               <CustomSelect
@@ -1414,7 +1414,7 @@ export default function Investment() {
                           price: ''
                         }));
                       } else if (typeName === 'crypto' || typeName === 'equity') {
-                        // Solo obtener precio automáticamente para crypto y equity
+                      // Solo obtener precio automáticamente para crypto y equity
                         try {
                           const price = await api.getPrice(selectedInv.concept.toUpperCase());
                           if (price && price > 0) {
@@ -1509,21 +1509,21 @@ export default function Investment() {
                 return null;
               }
               return (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Precio por Unidad</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={operationData.price}
-                    onChange={(e) => {
-                      const cleaned = e.target.value.replace(/[^0-9,.-]/g, '');
-                      const normalized = cleaned.replace('.', ',');
-                      setOperationData(prev => ({ ...prev, price: normalized }));
-                    }}
-                    className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Ej: 1000,50"
-                  />
-                </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Precio por Unidad</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={operationData.price}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/[^0-9,.-]/g, '');
+                  const normalized = cleaned.replace('.', ',');
+                  setOperationData(prev => ({ ...prev, price: normalized }));
+                }}
+                className="w-full h-9 px-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="Ej: 1000,50"
+              />
+            </div>
               );
             })()}
 
@@ -1549,26 +1549,26 @@ export default function Investment() {
               />
             </div>
 
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
-                  >
-                    Guardar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowOperationForm(false);
-                      setSelectedInvestmentId(null);
-                      setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
-                    }}
-                    className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
+              >
+                Guardar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOperationForm(false);
+                  setSelectedInvestmentId(null);
+                  setOperationData({ type: 'COMPRA', amount: '', price: '', note: '', date: new Date().toISOString().split('T')[0] });
+                }}
+                className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
             </div>
           </div>
         </div>

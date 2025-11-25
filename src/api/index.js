@@ -81,17 +81,23 @@ export async function getMonthlySummarySections(file) {
   return data;
 }
 
-export async function processMonthlySummarySection(sectionContent, sectionTitle) {
+export async function processMonthlySummarySection(sectionContent, sectionTitle, selectedBank = null) {
   try {
     const { data } = await http.post('/upload/monthly-summary/process-section', {
       sectionContent,
       sectionTitle,
+      selectedBank, // { categoryId, concept, categoryName }
     });
     return data;
   } catch (error) {
     // Re-lanzar el error para que el frontend pueda manejarlo
     throw error;
   }
+}
+
+export async function deleteAllData() {
+  const { data } = await http.delete('/upload/all-data');
+  return data;
 }
 
 export async function getExchangeRates() {
