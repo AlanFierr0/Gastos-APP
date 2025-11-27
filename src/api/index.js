@@ -204,9 +204,12 @@ export async function updateHoldingPrices() {
   return data;
 }
 
-export async function getPrice(symbol) {
+export async function getPrice(symbol, forceRefresh = false) {
   try {
-    const { data } = await http.get(`/prices/symbol/${symbol}`);
+    const url = forceRefresh 
+      ? `/prices/symbol/${symbol}?forceRefresh=true`
+      : `/prices/symbol/${symbol}`;
+    const { data } = await http.get(url);
     return data?.price || null;
   } catch (error) {
     console.error(`Error getting price for ${symbol}:`, error);

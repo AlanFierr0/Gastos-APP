@@ -110,33 +110,17 @@ export default function Investment() {
     }).sort((a, b) => b.totalValue - a.totalValue);
   }, [groupedInvestments, gbpPrice]);
 
-  async function updatePricesSilently() {
-    try {
-      // Primero actualizar los precios desde las APIs
-      await api.updatePrices();
-      // Luego actualizar los precios de las inversiones
-      await api.updateInvestmentPrices();
-      // Recargar las inversiones para ver los precios actualizados
-      await loadInvestments();
-    } catch (error) {
-      console.error('Error updating prices silently:', error);
-      // No mostrar error al usuario, solo loguear
-    }
-  }
 
   useEffect(() => {
     ensureInvestmentCategories();
-    // Actualizar precios primero, luego cargar inversiones
-    updatePricesSilently().then(() => {
-      loadInvestments();
-    });
-    // Cargar precio de GBP
+    // Solo cargar inversiones y precios desde BD (no actualizar desde APIs)
+    loadInvestments();
     loadGbpPrice();
   }, []);
 
   async function loadGbpPrice() {
     try {
-      // Intentar con diferentes símbolos posibles
+      // Cargar desde BD (sin forzar actualización desde API)
       let price = await api.getPrice('GBPUSD=X');
       
       // Si no funciona, intentar sin el =X
@@ -152,8 +136,6 @@ export default function Investment() {
       if (price && price > 0) {
         setGbpPrice(price);
       } else {
-        console.warn('GBP price not available from API');
-        // No reintentar infinitamente, solo mostrar "No disponible"
         setGbpPrice(null);
       }
     } catch (error) {
@@ -494,8 +476,8 @@ export default function Investment() {
         await api.createInvestment(payload);
       }
 
-      // Actualizar precios automáticamente después de crear/actualizar
-      await updatePricesSilently();
+      // Recargar inversiones para ver los cambios
+      await loadInvestments();
       resetForm();
       setToast({
         message: editingId ? 'Inversión actualizada exitosamente' : 'Inversión creada exitosamente',
@@ -598,8 +580,7 @@ export default function Investment() {
       });
       await loadInvestments();
       await loadOperations(selectedInvestmentId);
-      // Actualizar precios automáticamente después de crear una operación
-      await updatePricesSilently();
+      // Actualizar precios automáticamente después de crear una operación (con debounce)
       setShowOperationForm(false);
       setSelectedInvestmentId(null);
       setOperationData({

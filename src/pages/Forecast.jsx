@@ -446,6 +446,7 @@ export default function Forecast() {
         
         const targetMap = gridType === 'expense' ? newState.expenses : newState.income;
         const calculatedMap = gridType === 'expense' ? forecastValuesCalculated.expenses : forecastValuesCalculated.income;
+        const inflationRates = gridType === 'expense' ? expenseInflationRates : incomeInflationRates;
         
         if (!targetMap.has(conceptKey)) {
           // Copy all months from calculated values to preserve them
@@ -465,15 +466,86 @@ export default function Forecast() {
           // Set the edited month
           monthMap.set(month, numValue);
           
-          // Update all future months (months after the edited one) to the same value
-          for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
-            monthMap.set(futureMonth, numValue);
+          // Get expenseType for expenses to determine how to apply inflation
+          let expenseType = null;
+          if (gridType === 'expense') {
+            const decemberData = decemberValues.expenses.get(conceptKey);
+            expenseType = decemberData?.expenseType || 'MENSUAL';
+          }
+          
+          // Calculate inflation from edited month to each future month
+          // The edited value is treated as the base value for that month
+          // We need to calculate what that value should be in future months with inflation
+          if (gridType === 'expense' && expenseType === 'SEMESTRAL') {
+            // SEMESTRAL: only update months 6 and 12 if they are >= edited month
+            if (month <= 6) {
+              // Calculate inflation from edited month to month 6 (including both months)
+              let accumulatedInflation = 0;
+              for (let m = month + 1; m <= 6; m++) {
+                accumulatedInflation += inflationRates[m] || 0;
+              }
+              const multiplier6 = 1 + (accumulatedInflation / 100);
+              monthMap.set(6, numValue * multiplier6);
+            }
+            
+            if (month <= 12) {
+              // Calculate inflation from edited month to month 12 (including both months)
+              let accumulatedInflation = 0;
+              for (let m = month + 1; m <= 12; m++) {
+                accumulatedInflation += inflationRates[m] || 0;
+              }
+              const multiplier12 = 1 + (accumulatedInflation / 100);
+              monthMap.set(12, numValue * multiplier12);
+            }
+          } else if (gridType === 'expense' && expenseType === 'ANUAL') {
+            // ANUAL: only update month 12 if it's >= edited month
+            if (month <= 12) {
+              let accumulatedInflation = 0;
+              for (let m = month + 1; m <= 12; m++) {
+                accumulatedInflation += inflationRates[m] || 0;
+              }
+              const multiplier = 1 + (accumulatedInflation / 100);
+              monthMap.set(12, numValue * multiplier);
+            }
+          } else {
+            // MENSUAL, EXCEPCIONAL, or INCOME: apply inflation to all future months
+            // Calculate inflation accumulated from edited month to each future month
+            for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
+              // Calculate inflation from edited month to future month (not including edited month)
+              let accumulatedInflation = 0;
+              for (let m = month + 1; m <= futureMonth; m++) {
+                accumulatedInflation += inflationRates[m] || 0;
+              }
+              // Apply the accumulated inflation to the edited value
+              const multiplier = 1 + (accumulatedInflation / 100);
+              monthMap.set(futureMonth, numValue * multiplier);
+            }
           }
         } else {
           monthMap.delete(month);
           // Also delete future months if value is 0
-          for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
-            monthMap.delete(futureMonth);
+          if (gridType === 'expense') {
+            const decemberData = decemberValues.expenses.get(conceptKey);
+            const expenseType = decemberData?.expenseType || 'MENSUAL';
+            
+            if (expenseType === 'SEMESTRAL') {
+              // Only delete months 6 and 12 if they are >= edited month
+              if (month <= 6) monthMap.delete(6);
+              if (month <= 12) monthMap.delete(12);
+            } else if (expenseType === 'ANUAL') {
+              // Only delete month 12 if it's >= edited month
+              if (month <= 12) monthMap.delete(12);
+            } else {
+              // Delete all future months
+              for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
+                monthMap.delete(futureMonth);
+              }
+            }
+          } else {
+            // Income: delete all future months
+            for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
+              monthMap.delete(futureMonth);
+            }
           }
         }
         
