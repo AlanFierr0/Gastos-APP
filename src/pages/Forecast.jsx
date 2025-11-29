@@ -1,7 +1,7 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext.jsx';
-import { formatMoneyNoDecimals, formatNumber, capitalizeWords, extractYearMonth } from '../utils/format.js';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {useNavigate} from 'react-router-dom';
+import {useApp} from '../context/AppContext.jsx';
+import {capitalizeWords, extractYearMonth, formatMoneyNoDecimals, formatNumber} from '../utils/format.js';
 
 function formatMonthYearLabel(year, month) {
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -120,73 +120,94 @@ export default function Forecast() {
       }
       
       if (expenseType === 'MENSUAL') {
-        // Mensual: todos los meses iguales con inflación acumulada
-        let accumulatedInflation = 0;
-        for (let month = 1; month <= 12; month++) {
-          accumulatedInflation += expenseInflationRates[month] || 0;
-          const multiplier = 1 + (accumulatedInflation / 100);
-          values.expenses.get(conceptKey).set(month, amount * multiplier);
+        // Mensual: enero sin inflación, luego cada mes usa la inflación del mes anterior
+        let currentValue = amount; // Enero sin inflación
+        values.expenses.get(conceptKey).set(1, currentValue);
+        
+        for (let month = 2; month <= 12; month++) {
+          // Usar la inflación del mes anterior
+          const previousMonthInflation = expenseInflationRates[month - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
+          currentValue = currentValue * multiplier;
+          values.expenses.get(conceptKey).set(month, currentValue);
         }
       } else if (expenseType === 'SEMESTRAL') {
-        // Semestral: aparece en junio (mes 6) y diciembre (mes 12) con inflación acumulada hasta cada mes
-        // June (month 6)
-        let accumulatedInflation = 0;
-        for (let month = 1; month <= 6; month++) {
-          accumulatedInflation += expenseInflationRates[month] || 0;
-        }
-        const multiplier6 = 1 + (accumulatedInflation / 100);
-        values.expenses.get(conceptKey).set(6, amount * multiplier6);
+        // Semestral: aparece en junio (mes 6) y diciembre (mes 12)
+        // Aplicar inflación del mes anterior mes a mes
+        let currentValue = amount; // Valor base
         
-        // December (month 12)
-        accumulatedInflation = 0;
-        for (let month = 1; month <= 12; month++) {
-          accumulatedInflation += expenseInflationRates[month] || 0;
+        // Calcular hasta junio aplicando inflación del mes anterior
+        for (let month = 2; month <= 6; month++) {
+          const previousMonthInflation = expenseInflationRates[month - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
+          currentValue = currentValue * multiplier;
         }
-        const multiplier12 = 1 + (accumulatedInflation / 100);
-        values.expenses.get(conceptKey).set(12, amount * multiplier12);
+        values.expenses.get(conceptKey).set(6, currentValue);
+        
+        // Calcular hasta diciembre aplicando inflación del mes anterior desde junio
+        for (let month = 7; month <= 12; month++) {
+          const previousMonthInflation = expenseInflationRates[month - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
+          currentValue = currentValue * multiplier;
+        }
+        values.expenses.get(conceptKey).set(12, currentValue);
       } else if (expenseType === 'ANUAL') {
-        // Anual: solo en diciembre del año próximo (mes 12) con inflación acumulada hasta diciembre
-        let accumulatedInflation = 0;
-        for (let month = 1; month <= 12; month++) {
-          accumulatedInflation += expenseInflationRates[month] || 0;
+        // Anual: solo en diciembre del año próximo (mes 12)
+        // Aplicar inflación del mes anterior mes a mes desde enero hasta diciembre
+        let currentValue = amount; // Valor base
+        
+        for (let month = 2; month <= 12; month++) {
+          const previousMonthInflation = expenseInflationRates[month - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
+          currentValue = currentValue * multiplier;
         }
-        const multiplier = 1 + (accumulatedInflation / 100);
-        // Only set value for month 12 (December)
-        values.expenses.get(conceptKey).set(12, amount * multiplier);
+        values.expenses.get(conceptKey).set(12, currentValue);
       } else if (expenseType === 'EXCEPCIONAL') {
         // Excepcional: dividir el total anual entre 12 meses (promedio mensual)
-        const monthlyAmount = amount / 12;
-        let accumulatedInflation = 0;
-        for (let month = 1; month <= 12; month++) {
-          accumulatedInflation += expenseInflationRates[month] || 0;
-          const multiplier = 1 + (accumulatedInflation / 100);
-          values.expenses.get(conceptKey).set(month, monthlyAmount * multiplier);
+        // Enero sin inflación, luego cada mes usa la inflación del mes anterior
+        let currentValue = amount / 12; // Enero sin inflación
+        values.expenses.get(conceptKey).set(1, currentValue);
+        
+        for (let month = 2; month <= 12; month++) {
+          // Usar la inflación del mes anterior
+          const previousMonthInflation = expenseInflationRates[month - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
+          currentValue = currentValue * multiplier;
+          values.expenses.get(conceptKey).set(month, currentValue);
         }
       } else {
         // Default: MENSUAL behavior
-        let accumulatedInflation = 0;
-        for (let month = 1; month <= 12; month++) {
-          accumulatedInflation += expenseInflationRates[month] || 0;
-          const multiplier = 1 + (accumulatedInflation / 100);
-          values.expenses.get(conceptKey).set(month, amount * multiplier);
+        // Enero sin inflación, luego cada mes usa la inflación del mes anterior
+        let currentValue = amount; // Enero sin inflación
+        values.expenses.get(conceptKey).set(1, currentValue);
+        
+        for (let month = 2; month <= 12; month++) {
+          // Usar la inflación del mes anterior
+          const previousMonthInflation = expenseInflationRates[month - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
+          currentValue = currentValue * multiplier;
+          values.expenses.get(conceptKey).set(month, currentValue);
         }
       }
     });
 
-    // Calculate accumulated inflation for income - grouped by concept (category::concept)
-    let accumulatedIncomeInflation = 0;
-    for (let month = 1; month <= 12; month++) {
-      accumulatedIncomeInflation += incomeInflationRates[month] || 0;
-      const incomeMultiplier = 1 + (accumulatedIncomeInflation / 100);
-
-      // Apply to income - grouped by conceptKey
-      decemberValues.income.forEach(({ amount }, conceptKey) => {
-        if (!values.income.has(conceptKey)) {
-          values.income.set(conceptKey, new Map());
-        }
-        values.income.get(conceptKey).set(month, amount * incomeMultiplier);
-      });
-    }
+    // Calculate income - enero sin inflación, luego cada mes usa la inflación del mes anterior
+    decemberValues.income.forEach(({ amount }, conceptKey) => {
+      if (!values.income.has(conceptKey)) {
+        values.income.set(conceptKey, new Map());
+      }
+      
+      let currentValue = amount; // Enero sin inflación
+      values.income.get(conceptKey).set(1, currentValue);
+      
+      for (let month = 2; month <= 12; month++) {
+        // Usar la inflación del mes anterior
+        const previousMonthInflation = incomeInflationRates[month - 1] || 0;
+        const multiplier = 1 + (previousMonthInflation / 100);
+        currentValue = currentValue * multiplier;
+        values.income.get(conceptKey).set(month, currentValue);
+      }
+    });
 
     return values;
   }, [decemberValues, expenseInflationRates, incomeInflationRates]);
@@ -482,46 +503,45 @@ export default function Forecast() {
             let currentValue = numValue;
             
             if (month <= 6) {
-              // Apply inflation from edited month to month 6
+              // Aplicar inflación del mes anterior desde el mes editado hasta junio
               for (let m = month + 1; m <= 6; m++) {
-                const monthlyInflation = inflationRates[m] || 0;
-                const multiplier = 1 + (monthlyInflation / 100);
+                const previousMonthInflation = inflationRates[m - 1] || 0;
+                const multiplier = 1 + (previousMonthInflation / 100);
                 currentValue = currentValue * multiplier;
               }
               monthMap.set(6, currentValue);
             }
             
             if (month <= 12) {
-              // Reset to edited value and apply inflation from edited month to month 12
+              // Aplicar inflación del mes anterior desde el mes editado hasta diciembre
               currentValue = numValue;
               for (let m = month + 1; m <= 12; m++) {
-                const monthlyInflation = inflationRates[m] || 0;
-                const multiplier = 1 + (monthlyInflation / 100);
+                const previousMonthInflation = inflationRates[m - 1] || 0;
+                const multiplier = 1 + (previousMonthInflation / 100);
                 currentValue = currentValue * multiplier;
               }
               monthMap.set(12, currentValue);
             }
           } else if (gridType === 'expense' && expenseType === 'ANUAL') {
             // ANUAL: only update month 12 if it's >= edited month
-            // Apply inflation compoundly (multiplicatively) month by month
+            // Aplicar inflación del mes anterior mes a mes
             if (month <= 12) {
               let currentValue = numValue;
               for (let m = month + 1; m <= 12; m++) {
-                const monthlyInflation = inflationRates[m] || 0;
-                const multiplier = 1 + (monthlyInflation / 100);
+                const previousMonthInflation = inflationRates[m - 1] || 0;
+                const multiplier = 1 + (previousMonthInflation / 100);
                 currentValue = currentValue * multiplier;
               }
               monthMap.set(12, currentValue);
             }
           } else {
             // MENSUAL, EXCEPCIONAL, or INCOME: apply inflation to all future months
-            // Calculate inflation accumulated from edited month to each future month
-            // Apply inflation compoundly (multiplicatively) month by month
+            // Cada mes futuro usa la inflación del mes anterior
             let currentValue = numValue;
             for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
-              // Apply inflation for this month to the current value
-              const monthlyInflation = inflationRates[futureMonth] || 0;
-              const multiplier = 1 + (monthlyInflation / 100);
+              // Usar la inflación del mes anterior (el mes que acabamos de calcular)
+              const previousMonthInflation = inflationRates[futureMonth - 1] || 0;
+              const multiplier = 1 + (previousMonthInflation / 100);
               currentValue = currentValue * multiplier;
               monthMap.set(futureMonth, currentValue);
             }
@@ -609,11 +629,12 @@ export default function Forecast() {
         // This ensures that when inflation changes, all months are recalculated correctly
         if (expenseType === 'SEMESTRAL') {
           // For semestral, only recalculate months 6 and 12 if they come after the edited month
+          // Usar inflación del mes anterior
           if (firstEditedMonth < 6) {
             let currentValue = baseValue;
             for (let m = firstEditedMonth + 1; m <= 6; m++) {
-              const monthlyInflation = inflationRates[m] || 0;
-              const multiplier = 1 + (monthlyInflation / 100);
+              const previousMonthInflation = inflationRates[m - 1] || 0;
+              const multiplier = 1 + (previousMonthInflation / 100);
               currentValue = currentValue * multiplier;
             }
             newMonthMap.set(6, currentValue);
@@ -621,29 +642,31 @@ export default function Forecast() {
           if (firstEditedMonth < 12) {
             let currentValue = baseValue;
             for (let m = firstEditedMonth + 1; m <= 12; m++) {
-              const monthlyInflation = inflationRates[m] || 0;
-              const multiplier = 1 + (monthlyInflation / 100);
+              const previousMonthInflation = inflationRates[m - 1] || 0;
+              const multiplier = 1 + (previousMonthInflation / 100);
               currentValue = currentValue * multiplier;
             }
             newMonthMap.set(12, currentValue);
           }
         } else if (expenseType === 'ANUAL') {
           // For anual, only recalculate month 12 if it comes after the edited month
+          // Usar inflación del mes anterior
           if (firstEditedMonth < 12) {
             let currentValue = baseValue;
             for (let m = firstEditedMonth + 1; m <= 12; m++) {
-              const monthlyInflation = inflationRates[m] || 0;
-              const multiplier = 1 + (monthlyInflation / 100);
+              const previousMonthInflation = inflationRates[m - 1] || 0;
+              const multiplier = 1 + (previousMonthInflation / 100);
               currentValue = currentValue * multiplier;
             }
             newMonthMap.set(12, currentValue);
           }
         } else {
           // MENSUAL, EXCEPCIONAL: recalculate all future months from first edited month
+          // Usar inflación del mes anterior
           let currentValue = baseValue;
           for (let m = firstEditedMonth + 1; m <= 12; m++) {
-            const monthlyInflation = inflationRates[m] || 0;
-            const multiplier = 1 + (monthlyInflation / 100);
+            const previousMonthInflation = inflationRates[m - 1] || 0;
+            const multiplier = 1 + (previousMonthInflation / 100);
             currentValue = currentValue * multiplier;
             newMonthMap.set(m, currentValue);
           }
@@ -673,10 +696,11 @@ export default function Forecast() {
 
         // Recalculate all future months from the first edited month
         // This ensures that when inflation changes, all months are recalculated correctly
+        // Usar inflación del mes anterior
         let currentValue = baseValue;
         for (let m = firstEditedMonth + 1; m <= 12; m++) {
-          const monthlyInflation = inflationRates[m] || 0;
-          const multiplier = 1 + (monthlyInflation / 100);
+          const previousMonthInflation = inflationRates[m - 1] || 0;
+          const multiplier = 1 + (previousMonthInflation / 100);
           currentValue = currentValue * multiplier;
           newMonthMap.set(m, currentValue);
         }
