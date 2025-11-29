@@ -478,47 +478,52 @@ export default function Forecast() {
           // We need to calculate what that value should be in future months with inflation
           if (gridType === 'expense' && expenseType === 'SEMESTRAL') {
             // SEMESTRAL: only update months 6 and 12 if they are >= edited month
+            // Apply inflation compoundly (multiplicatively) month by month
+            let currentValue = numValue;
+            
             if (month <= 6) {
-              // Calculate inflation from edited month to month 6 (including both months)
-              let accumulatedInflation = 0;
+              // Apply inflation from edited month to month 6
               for (let m = month + 1; m <= 6; m++) {
-                accumulatedInflation += inflationRates[m] || 0;
+                const monthlyInflation = inflationRates[m] || 0;
+                const multiplier = 1 + (monthlyInflation / 100);
+                currentValue = currentValue * multiplier;
               }
-              const multiplier6 = 1 + (accumulatedInflation / 100);
-              monthMap.set(6, numValue * multiplier6);
+              monthMap.set(6, currentValue);
             }
             
             if (month <= 12) {
-              // Calculate inflation from edited month to month 12 (including both months)
-              let accumulatedInflation = 0;
+              // Reset to edited value and apply inflation from edited month to month 12
+              currentValue = numValue;
               for (let m = month + 1; m <= 12; m++) {
-                accumulatedInflation += inflationRates[m] || 0;
+                const monthlyInflation = inflationRates[m] || 0;
+                const multiplier = 1 + (monthlyInflation / 100);
+                currentValue = currentValue * multiplier;
               }
-              const multiplier12 = 1 + (accumulatedInflation / 100);
-              monthMap.set(12, numValue * multiplier12);
+              monthMap.set(12, currentValue);
             }
           } else if (gridType === 'expense' && expenseType === 'ANUAL') {
             // ANUAL: only update month 12 if it's >= edited month
+            // Apply inflation compoundly (multiplicatively) month by month
             if (month <= 12) {
-              let accumulatedInflation = 0;
+              let currentValue = numValue;
               for (let m = month + 1; m <= 12; m++) {
-                accumulatedInflation += inflationRates[m] || 0;
+                const monthlyInflation = inflationRates[m] || 0;
+                const multiplier = 1 + (monthlyInflation / 100);
+                currentValue = currentValue * multiplier;
               }
-              const multiplier = 1 + (accumulatedInflation / 100);
-              monthMap.set(12, numValue * multiplier);
+              monthMap.set(12, currentValue);
             }
           } else {
             // MENSUAL, EXCEPCIONAL, or INCOME: apply inflation to all future months
             // Calculate inflation accumulated from edited month to each future month
+            // Apply inflation compoundly (multiplicatively) month by month
+            let currentValue = numValue;
             for (let futureMonth = month + 1; futureMonth <= 12; futureMonth++) {
-              // Calculate inflation from edited month to future month (not including edited month)
-              let accumulatedInflation = 0;
-              for (let m = month + 1; m <= futureMonth; m++) {
-                accumulatedInflation += inflationRates[m] || 0;
-              }
-              // Apply the accumulated inflation to the edited value
-              const multiplier = 1 + (accumulatedInflation / 100);
-              monthMap.set(futureMonth, numValue * multiplier);
+              // Apply inflation for this month to the current value
+              const monthlyInflation = inflationRates[futureMonth] || 0;
+              const multiplier = 1 + (monthlyInflation / 100);
+              currentValue = currentValue * multiplier;
+              monthMap.set(futureMonth, currentValue);
             }
           }
         } else {
@@ -560,6 +565,128 @@ export default function Forecast() {
       setEditingDetail(null);
     }
   };
+
+  // Recalculate edited values when inflation changes
+  useEffect(() => {
+    // Don't recalculate while user is editing
+    if (editingDetail) {
+      return;
+    }
+    
+    // Only recalculate if there are edited values
+    if (forecastValuesState.expenses.size === 0 && forecastValuesState.income.size === 0) {
+      return;
+    }
+
+    setForecastValuesState(prev => {
+      const newState = {
+        expenses: new Map(prev.expenses),
+        income: new Map(prev.income),
+      };
+
+      // Recalculate expenses
+      newState.expenses.forEach((monthMap, conceptKey) => {
+        const newMonthMap = new Map(monthMap);
+        const decemberData = decemberValues.expenses.get(conceptKey);
+        const expenseType = decemberData?.expenseType || 'MENSUAL';
+        const inflationRates = expenseInflationRates;
+
+        // Find the first edited month (earliest edit) - this is our base
+        let firstEditedMonth = 13;
+        monthMap.forEach((value, m) => {
+          if (m < firstEditedMonth && value > 0) {
+            firstEditedMonth = m;
+          }
+        });
+
+        if (firstEditedMonth > 12) return; // No edited months
+
+        // Get the base value from the first edited month
+        const baseValue = monthMap.get(firstEditedMonth);
+        if (!baseValue || baseValue <= 0) return;
+
+        // Recalculate all future months from the first edited month
+        // This ensures that when inflation changes, all months are recalculated correctly
+        if (expenseType === 'SEMESTRAL') {
+          // For semestral, only recalculate months 6 and 12 if they come after the edited month
+          if (firstEditedMonth < 6) {
+            let currentValue = baseValue;
+            for (let m = firstEditedMonth + 1; m <= 6; m++) {
+              const monthlyInflation = inflationRates[m] || 0;
+              const multiplier = 1 + (monthlyInflation / 100);
+              currentValue = currentValue * multiplier;
+            }
+            newMonthMap.set(6, currentValue);
+          }
+          if (firstEditedMonth < 12) {
+            let currentValue = baseValue;
+            for (let m = firstEditedMonth + 1; m <= 12; m++) {
+              const monthlyInflation = inflationRates[m] || 0;
+              const multiplier = 1 + (monthlyInflation / 100);
+              currentValue = currentValue * multiplier;
+            }
+            newMonthMap.set(12, currentValue);
+          }
+        } else if (expenseType === 'ANUAL') {
+          // For anual, only recalculate month 12 if it comes after the edited month
+          if (firstEditedMonth < 12) {
+            let currentValue = baseValue;
+            for (let m = firstEditedMonth + 1; m <= 12; m++) {
+              const monthlyInflation = inflationRates[m] || 0;
+              const multiplier = 1 + (monthlyInflation / 100);
+              currentValue = currentValue * multiplier;
+            }
+            newMonthMap.set(12, currentValue);
+          }
+        } else {
+          // MENSUAL, EXCEPCIONAL: recalculate all future months from first edited month
+          let currentValue = baseValue;
+          for (let m = firstEditedMonth + 1; m <= 12; m++) {
+            const monthlyInflation = inflationRates[m] || 0;
+            const multiplier = 1 + (monthlyInflation / 100);
+            currentValue = currentValue * multiplier;
+            newMonthMap.set(m, currentValue);
+          }
+        }
+
+        newState.expenses.set(conceptKey, newMonthMap);
+      });
+
+      // Recalculate income
+      newState.income.forEach((monthMap, conceptKey) => {
+        const newMonthMap = new Map(monthMap);
+        const inflationRates = incomeInflationRates;
+
+        // Find the first edited month (earliest edit) - this is our base
+        let firstEditedMonth = 13;
+        monthMap.forEach((value, m) => {
+          if (m < firstEditedMonth && value > 0) {
+            firstEditedMonth = m;
+          }
+        });
+
+        if (firstEditedMonth > 12) return; // No edited months
+
+        // Get the base value from the first edited month
+        const baseValue = monthMap.get(firstEditedMonth);
+        if (!baseValue || baseValue <= 0) return;
+
+        // Recalculate all future months from the first edited month
+        // This ensures that when inflation changes, all months are recalculated correctly
+        let currentValue = baseValue;
+        for (let m = firstEditedMonth + 1; m <= 12; m++) {
+          const monthlyInflation = inflationRates[m] || 0;
+          const multiplier = 1 + (monthlyInflation / 100);
+          currentValue = currentValue * multiplier;
+          newMonthMap.set(m, currentValue);
+        }
+
+        newState.income.set(conceptKey, newMonthMap);
+      });
+
+      return newState;
+    });
+  }, [expenseInflationRates, incomeInflationRates, decemberValues]);
 
   useEffect(() => {
     if (editingDetail && inputRef.current) {
