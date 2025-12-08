@@ -4,9 +4,22 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatMoneyNoDecimals, capitalizeWords, extractYearMonth } from '../utils/format.js';
 import CustomSelect from '../components/CustomSelect.jsx';
 
-function isForecastMonth(monthKey) {
+function isForecastMonth(monthKey, currentMonthKey = null) {
   // monthKey format: "YYYY-MM"
   const [year, month] = monthKey.split('-').map(Number);
+  
+  // If currentMonthKey is provided, use it to determine forecast
+  if (currentMonthKey) {
+    const [currentYear, currentMonth] = currentMonthKey.split('-').map(Number);
+    // If year is in the future, it's forecast
+    if (year > currentYear) return true;
+    // If year is in the past, it's not forecast
+    if (year < currentYear) return false;
+    // If same year, month > current month is forecast
+    return month > currentMonth;
+  }
+  
+  // Fallback to system date if no currentMonthKey provided
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
@@ -19,9 +32,9 @@ function isForecastMonth(monthKey) {
   return month >= currentMonth;
 }
 
-function getLastPastMonthIndex(months) {
+function getLastPastMonthIndex(months, currentMonthKey = null) {
   for (let i = months.length - 1; i >= 0; i--) {
-    if (!isForecastMonth(months[i])) {
+    if (!isForecastMonth(months[i], currentMonthKey)) {
       return i;
     }
   }
@@ -33,6 +46,50 @@ function formatMonthYearLabel(year, month) {
   const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   // Use shorter format: just month abbreviation if same year, or month + last 2 digits of year
   return monthNames[month - 1];
+}
+
+function getMonthNameInSpanish(month) {
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  return monthNames[month - 1];
+}
+
+function getAvailableCurrentMonthOptions(selectedCurrentMonthKey = null) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
+  
+  // If a selectedCurrentMonthKey is provided, use it as the minimum allowed month
+  let minYear, minMonth;
+  if (selectedCurrentMonthKey) {
+    [minYear, minMonth] = selectedCurrentMonthKey.split('-').map(Number);
+  } else {
+    // Start from previous month (currentMonth - 1)
+    // If currentMonth is 1 (January), previous month is December of previous year
+    minYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    minMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+  }
+  
+  const options = [];
+  
+  // Add months from minMonth/minYear to end of next year
+  // First, add remaining months of minYear (from minMonth to December)
+  for (let month = minMonth; month <= 12; month++) {
+    const monthKey = `${minYear}-${String(month).padStart(2, '0')}`;
+    const label = `${getMonthNameInSpanish(month)} ${minYear}`;
+    options.push({ value: monthKey, label });
+  }
+  
+  // Add all months of next year (minYear + 1)
+  for (let month = 1; month <= 12; month++) {
+    const monthKey = `${minYear + 1}-${String(month).padStart(2, '0')}`;
+    const label = `${getMonthNameInSpanish(month)} ${minYear + 1}`;
+    options.push({ value: monthKey, label });
+  }
+  
+  return options;
 }
 
 export default function Grid() {
@@ -52,6 +109,18 @@ export default function Grid() {
   const gridRef = useRef(null);
   const inputRef = useRef(null);
   const lastEditingKeyRef = useRef(null);
+  
+  // Estado para el mes actual seleccionado manualmente
+  const [currentMonthKey, setCurrentMonthKey] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  });
+  
+  // Estado para el modal de confirmación de cambio de mes
+  const [showMonthChangeConfirm, setShowMonthChangeConfirm] = useState(false);
+  const [pendingMonthKey, setPendingMonthKey] = useState(null);
 
   // Get all unique years
   const availableYears = useMemo(() => {
@@ -80,6 +149,18 @@ export default function Grid() {
     }
   }, [availableYears, selectedYear]);
 
+  // Ensure currentMonthKey is valid when selectedYear changes
+  useEffect(() => {
+    if (selectedYear !== null) {
+      const [currentYear] = currentMonthKey.split('-').map(Number);
+      if (currentYear !== selectedYear) {
+        // If current month is not in selected year, set to first month of selected year
+        const newMonthKey = `${selectedYear}-01`;
+        setCurrentMonthKey(newMonthKey);
+      }
+    }
+  }, [selectedYear]);
+
   // Get all unique months (filtered by selectedYear if set, and forecast if toggle is off)
   const months = useMemo(() => {
     const monthSet = new Set();
@@ -92,7 +173,7 @@ export default function Grid() {
       if (selectedYear !== null && ym.year !== selectedYear) return;
       const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
       // Filter forecast months if toggle is off
-      if (!showForecast && isForecastMonth(monthKey)) return;
+      if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
       monthSet.add(monthKey);
     });
 
@@ -104,13 +185,36 @@ export default function Grid() {
       if (selectedYear !== null && ym.year !== selectedYear) return;
       const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
       // Filter forecast months if toggle is off
-      if (!showForecast && isForecastMonth(monthKey)) return;
+      if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
       monthSet.add(monthKey);
     });
 
+    // Always include currentMonthKey if it's not already in the set
+    if (currentMonthKey && !monthSet.has(currentMonthKey)) {
+      monthSet.add(currentMonthKey);
+    }
+
     // Sort months ascending (January first, December last)
     return Array.from(monthSet).sort((a, b) => a.localeCompare(b));
-  }, [expenses, income, selectedYear, showForecast]);
+  }, [expenses, income, selectedYear, showForecast, currentMonthKey]);
+
+  // Helper function to check if a record is forecast
+  const isForecastRecord = (record) => {
+    if (!record) return false;
+    const note = record.note || '';
+    const isForecast = note.toLowerCase().includes('forecast');
+    // Debug log (remove after fixing)
+    if (isForecast && record.monthKey) {
+      console.log('Forecast record detected:', {
+        id: record.id,
+        monthKey: record.monthKey,
+        note: record.note,
+        currentMonthKey,
+        amount: record.amount
+      });
+    }
+    return isForecast;
+  };
 
   // Process expenses data (filtered by selectedYear if set)
   const expensesGridData = useMemo(() => {
@@ -137,15 +241,74 @@ export default function Grid() {
     // Convert to grid data structure
     const grid = Array.from(rowKeySet.values()).map((row) => {
       const monthData = {};
+      const monthDataForecast = {}; // Separate forecast data for current month
+      
+      // First, initialize empty arrays for current month to ensure clean separation
+      if (currentMonthKey) {
+        monthData[currentMonthKey] = [];
+        monthDataForecast[currentMonthKey] = [];
+      }
+      
       row.records.forEach((record) => {
-        if (!monthData[record.monthKey]) {
-          monthData[record.monthKey] = [];
+        const recordMonthKey = record.monthKey;
+        const isForecast = isForecastRecord(record);
+        
+        // For current month, ALWAYS separate real and forecast
+        if (recordMonthKey === currentMonthKey) {
+          if (isForecast) {
+            // Forecast records MUST go to monthDataForecast ONLY - NEVER to monthData
+            monthDataForecast[recordMonthKey].push(record);
+            // Debug log
+            console.log('✓ Forecast record added to monthDataForecast:', {
+              rowKey: row.key,
+              recordMonthKey,
+              currentMonthKey,
+              recordId: record.id,
+              note: record.note,
+              amount: record.amount
+            });
+          } else {
+            // Real records go to monthData ONLY - NEVER to monthDataForecast
+            monthData[recordMonthKey].push(record);
+            // Debug log for real records in current month
+            if (record.note && record.note.toLowerCase().includes('forecast')) {
+              console.error('ERROR: Real record has forecast note!', {
+                rowKey: row.key,
+                recordId: record.id,
+                note: record.note
+              });
+            }
+          }
+        } else {
+          // For other months, use normal structure (all records go to monthData, regardless of forecast status)
+          if (!monthData[recordMonthKey]) {
+            monthData[recordMonthKey] = [];
+          }
+          monthData[recordMonthKey].push(record);
         }
-        monthData[record.monthKey].push(record);
       });
+      
+      // Final verification: ensure no forecast records in monthData for current month
+      if (currentMonthKey && monthData[currentMonthKey]) {
+        const forecastInMonthData = monthData[currentMonthKey].filter(r => isForecastRecord(r));
+        if (forecastInMonthData.length > 0) {
+          console.error('ERROR: Found forecast records in monthData for current month!', {
+            rowKey: row.key,
+            currentMonthKey,
+            forecastRecords: forecastInMonthData.map(r => ({ id: r.id, note: r.note }))
+          });
+          // Remove forecast records from monthData
+          monthData[currentMonthKey] = monthData[currentMonthKey].filter(r => !isForecastRecord(r));
+          // Add them to monthDataForecast
+          forecastInMonthData.forEach(r => {
+            monthDataForecast[currentMonthKey].push(r);
+          });
+        }
+      }
       return {
         ...row,
         monthData,
+        monthDataForecast, // Forecast data for current month
         type: 'expense',
       };
     });
@@ -154,7 +317,7 @@ export default function Grid() {
     grid.sort((a, b) => a.key.localeCompare(b.key));
 
     return grid;
-  }, [expenses, t, selectedYear]);
+  }, [expenses, t, selectedYear, currentMonthKey]);
 
   // Process income data grouped by category (filtered by selectedYear if set)
   const incomeGridData = useMemo(() => {
@@ -181,15 +344,75 @@ export default function Grid() {
     // Convert to grid data structure
     const grid = Array.from(rowKeySet.values()).map((row) => {
       const monthData = {};
+      const monthDataForecast = {}; // Separate forecast data for current month
+      
+      // First, initialize empty arrays for current month to ensure clean separation
+      if (currentMonthKey) {
+        monthData[currentMonthKey] = [];
+        monthDataForecast[currentMonthKey] = [];
+      }
+      
       row.records.forEach((record) => {
-        if (!monthData[record.monthKey]) {
-          monthData[record.monthKey] = [];
+        const recordMonthKey = record.monthKey;
+        const isForecast = isForecastRecord(record);
+        
+        // For current month, ALWAYS separate real and forecast
+        if (recordMonthKey === currentMonthKey) {
+          if (isForecast) {
+            // Forecast records MUST go to monthDataForecast ONLY - NEVER to monthData
+            monthDataForecast[recordMonthKey].push(record);
+            // Debug log
+            console.log('✓ Forecast record added to monthDataForecast:', {
+              rowKey: row.key,
+              recordMonthKey,
+              currentMonthKey,
+              recordId: record.id,
+              note: record.note,
+              amount: record.amount
+            });
+          } else {
+            // Real records go to monthData ONLY - NEVER to monthDataForecast
+            monthData[recordMonthKey].push(record);
+            // Debug log for real records in current month
+            if (record.note && record.note.toLowerCase().includes('forecast')) {
+              console.error('ERROR: Real record has forecast note!', {
+                rowKey: row.key,
+                recordId: record.id,
+                note: record.note
+              });
+            }
+          }
+        } else {
+          // For other months, use normal structure (all records go to monthData, regardless of forecast status)
+          if (!monthData[recordMonthKey]) {
+            monthData[recordMonthKey] = [];
+          }
+          monthData[recordMonthKey].push(record);
         }
-        monthData[record.monthKey].push(record);
       });
+      
+      // Final verification: ensure no forecast records in monthData for current month
+      if (currentMonthKey && monthData[currentMonthKey]) {
+        const forecastInMonthData = monthData[currentMonthKey].filter(r => isForecastRecord(r));
+        if (forecastInMonthData.length > 0) {
+          console.error('ERROR: Found forecast records in monthData for current month!', {
+            rowKey: row.key,
+            currentMonthKey,
+            forecastRecords: forecastInMonthData.map(r => ({ id: r.id, note: r.note }))
+          });
+          // Remove forecast records from monthData
+          monthData[currentMonthKey] = monthData[currentMonthKey].filter(r => !isForecastRecord(r));
+          // Add them to monthDataForecast
+          forecastInMonthData.forEach(r => {
+            monthDataForecast[currentMonthKey].push(r);
+          });
+        }
+      }
+      
       return {
         ...row,
         monthData,
+        monthDataForecast, // Forecast data for current month
         type: 'income',
       };
     });
@@ -198,7 +421,7 @@ export default function Grid() {
     grid.sort((a, b) => a.key.localeCompare(b.key));
 
     return grid;
-  }, [income, t, selectedYear]);
+  }, [income, t, selectedYear, currentMonthKey]);
 
   // Calculate totals for expenses rows
   const expensesRowTotals = useMemo(() => {
@@ -206,15 +429,17 @@ export default function Grid() {
     expensesGridData.forEach((row) => {
       let total = 0;
       months.forEach((monthKey) => {
-        const records = row.monthData[monthKey] || [];
-        records.forEach((record) => {
+        // Include both real and forecast for current month
+        const realRecords = row.monthData[monthKey] || [];
+        const forecastRecords = (monthKey === currentMonthKey) ? (row.monthDataForecast?.[monthKey] || []) : [];
+        [...realRecords, ...forecastRecords].forEach((record) => {
           total += Number(record.amount || 0);
         });
       });
       totals.set(row.key, total);
     });
     return totals;
-  }, [expensesGridData, months]);
+  }, [expensesGridData, months, currentMonthKey]);
 
   // Calculate totals for expenses months
   const expensesMonthTotals = useMemo(() => {
@@ -222,15 +447,17 @@ export default function Grid() {
     months.forEach((monthKey) => {
       let total = 0;
       expensesGridData.forEach((row) => {
-        const records = row.monthData[monthKey] || [];
-        records.forEach((record) => {
+        // Include both real and forecast for current month
+        const realRecords = row.monthData[monthKey] || [];
+        const forecastRecords = (monthKey === currentMonthKey) ? (row.monthDataForecast?.[monthKey] || []) : [];
+        [...realRecords, ...forecastRecords].forEach((record) => {
           total += Number(record.amount || 0);
         });
       });
       totals.set(monthKey, total);
     });
     return totals;
-  }, [expensesGridData, months]);
+  }, [expensesGridData, months, currentMonthKey]);
 
   // Calculate totals for income rows
   const incomeRowTotals = useMemo(() => {
@@ -238,15 +465,17 @@ export default function Grid() {
     incomeGridData.forEach((row) => {
       let total = 0;
       months.forEach((monthKey) => {
-        const records = row.monthData[monthKey] || [];
-        records.forEach((record) => {
+        // Include both real and forecast for current month
+        const realRecords = row.monthData[monthKey] || [];
+        const forecastRecords = (monthKey === currentMonthKey) ? (row.monthDataForecast?.[monthKey] || []) : [];
+        [...realRecords, ...forecastRecords].forEach((record) => {
           total += Number(record.amount || 0);
         });
       });
       totals.set(row.key, total);
     });
     return totals;
-  }, [incomeGridData, months]);
+  }, [incomeGridData, months, currentMonthKey]);
 
   // Calculate totals for income months
   const incomeMonthTotals = useMemo(() => {
@@ -254,18 +483,20 @@ export default function Grid() {
     months.forEach((monthKey) => {
       let total = 0;
       incomeGridData.forEach((row) => {
-        const records = row.monthData[monthKey] || [];
-        records.forEach((record) => {
+        // Include both real and forecast for current month
+        const realRecords = row.monthData[monthKey] || [];
+        const forecastRecords = (monthKey === currentMonthKey) ? (row.monthDataForecast?.[monthKey] || []) : [];
+        [...realRecords, ...forecastRecords].forEach((record) => {
           total += Number(record.amount || 0);
         });
       });
       totals.set(monthKey, total);
     });
     return totals;
-  }, [incomeGridData, months]);
+  }, [incomeGridData, months, currentMonthKey]);
 
-  const handleCellClick = (rowIndex, monthKey, gridType) => {
-    setSelectedCell({ rowIndex, monthKey, gridType });
+  const handleCellClick = (rowIndex, monthKey, gridType, isForecast = false) => {
+    setSelectedCell({ rowIndex, monthKey, gridType, isForecast });
     setEditingCell(null);
   };
 
@@ -281,7 +512,7 @@ export default function Grid() {
   const handleSave = async () => {
     if (!editingCell) return;
     
-    const { rowIndex, monthKey, gridType } = editingCell;
+    const { rowIndex, monthKey, gridType, isForecast } = editingCell;
     const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
     const row = gridData[rowIndex];
     
@@ -295,7 +526,10 @@ export default function Grid() {
         return;
       }
 
-      const records = row.monthData[monthKey] || [];
+      // For current month, use separate data for real and forecast
+      const records = (monthKey === currentMonthKey && isForecast)
+        ? (row.monthDataForecast?.[monthKey] || [])
+        : (row.monthData[monthKey] || []);
       const currentTotal = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
       const difference = numValue - currentTotal;
 
@@ -321,6 +555,11 @@ export default function Grid() {
         const [year, month] = monthKey.split('-').map(Number);
         const date = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0)).toISOString();
         
+        // Determine note based on whether it's forecast
+        const note = (monthKey === currentMonthKey && isForecast) 
+          ? `Forecast ${year}`
+          : '';
+        
         if (gridType === 'expense') {
           // Find or create category
           const categoryName = row.key.toLowerCase();
@@ -336,7 +575,8 @@ export default function Grid() {
             concept: row.key,
             amount: numValue,
             date,
-            note: '',
+            note,
+            currency: 'ARS',
           });
         } else {
           // For income, use row key as concept
@@ -345,7 +585,8 @@ export default function Grid() {
             categoryName: row.key,
             amount: numValue,
             date,
-            note: '',
+            note,
+            currency: 'ARS',
           });
         }
       }
@@ -658,9 +899,21 @@ export default function Grid() {
   const handleKeyDown = (e, gridType) => {
     if (!selectedCell || selectedCell.gridType !== gridType) return;
 
-    const { rowIndex, monthKey } = selectedCell;
-    const monthIndex = months.indexOf(monthKey);
+    const { rowIndex, monthKey, isForecast } = selectedCell;
     const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
+    
+    // Build columns array for navigation
+    const columns = [];
+    months.forEach((mk) => {
+      if (mk === currentMonthKey) {
+        columns.push({ monthKey: mk, isForecast: false });
+        columns.push({ monthKey: mk, isForecast: true });
+      } else {
+        columns.push({ monthKey: mk, isForecast: false });
+      }
+    });
+    
+    const currentColIndex = columns.findIndex(col => col.monthKey === monthKey && col.isForecast === (isForecast || false));
     
     if (editingCell && editingCell.gridType === gridType) {
       if (e.key === 'Enter') {
@@ -680,29 +933,35 @@ export default function Grid() {
       handleCellDoubleClick(rowIndex, monthKey, gridType);
     } else if (e.key === 'ArrowUp' && rowIndex > 0) {
       e.preventDefault();
-      setSelectedCell({ rowIndex: rowIndex - 1, monthKey, gridType });
+      setSelectedCell({ rowIndex: rowIndex - 1, monthKey, gridType, isForecast });
     } else if (e.key === 'ArrowDown' && rowIndex < gridData.length - 1) {
       e.preventDefault();
-      setSelectedCell({ rowIndex: rowIndex + 1, monthKey, gridType });
-    } else if (e.key === 'ArrowLeft' && monthIndex > 0) {
+      setSelectedCell({ rowIndex: rowIndex + 1, monthKey, gridType, isForecast });
+    } else if (e.key === 'ArrowLeft' && currentColIndex > 0) {
       e.preventDefault();
-      setSelectedCell({ rowIndex, monthKey: months[monthIndex - 1], gridType });
-    } else if (e.key === 'ArrowRight' && monthIndex < months.length - 1) {
+      const prevCol = columns[currentColIndex - 1];
+      setSelectedCell({ rowIndex, monthKey: prevCol.monthKey, gridType, isForecast: prevCol.isForecast });
+    } else if (e.key === 'ArrowRight' && currentColIndex < columns.length - 1) {
       e.preventDefault();
-      setSelectedCell({ rowIndex, monthKey: months[monthIndex + 1], gridType });
+      const nextCol = columns[currentColIndex + 1];
+      setSelectedCell({ rowIndex, monthKey: nextCol.monthKey, gridType, isForecast: nextCol.isForecast });
     } else if (e.key === 'Tab') {
       e.preventDefault();
       if (e.shiftKey) {
-        if (monthIndex > 0) {
-          setSelectedCell({ rowIndex, monthKey: months[monthIndex - 1], gridType });
+        if (currentColIndex > 0) {
+          const prevCol = columns[currentColIndex - 1];
+          setSelectedCell({ rowIndex, monthKey: prevCol.monthKey, gridType, isForecast: prevCol.isForecast });
         } else if (rowIndex > 0) {
-          setSelectedCell({ rowIndex: rowIndex - 1, monthKey: months[months.length - 1], gridType });
+          const lastCol = columns[columns.length - 1];
+          setSelectedCell({ rowIndex: rowIndex - 1, monthKey: lastCol.monthKey, gridType, isForecast: lastCol.isForecast });
         }
       } else {
-        if (monthIndex < months.length - 1) {
-          setSelectedCell({ rowIndex, monthKey: months[monthIndex + 1], gridType });
+        if (currentColIndex < columns.length - 1) {
+          const nextCol = columns[currentColIndex + 1];
+          setSelectedCell({ rowIndex, monthKey: nextCol.monthKey, gridType, isForecast: nextCol.isForecast });
         } else if (rowIndex < gridData.length - 1) {
-          setSelectedCell({ rowIndex: rowIndex + 1, monthKey: months[0], gridType });
+          const firstCol = columns[0];
+          setSelectedCell({ rowIndex: rowIndex + 1, monthKey: firstCol.monthKey, gridType, isForecast: firstCol.isForecast });
         }
       }
     }
@@ -737,9 +996,9 @@ export default function Grid() {
     }
   }, [editingCell, editingDetail]);
 
-  const renderCell = (row, monthKey, rowIndex, gridType) => {
-    const isSelected = selectedCell?.rowIndex === rowIndex && selectedCell?.monthKey === monthKey && selectedCell?.gridType === gridType;
-    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.monthKey === monthKey && editingCell?.gridType === gridType;
+  const renderCell = (row, monthKey, rowIndex, gridType, isForecastColumn = false) => {
+    const isSelected = selectedCell?.rowIndex === rowIndex && selectedCell?.monthKey === monthKey && selectedCell?.gridType === gridType && selectedCell?.isForecast === isForecastColumn;
+    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.monthKey === monthKey && editingCell?.gridType === gridType && editingCell?.isForecast === isForecastColumn;
 
     if (isEditing) {
       return (
@@ -757,15 +1016,30 @@ export default function Grid() {
       );
     }
 
-    const records = row.monthData[monthKey] || [];
+    // For current month, use separate data for real and forecast
+    let records = [];
+    if (monthKey === currentMonthKey) {
+      // For current month, use the appropriate data source based on column type
+      if (isForecastColumn) {
+        // Forecast column: use monthDataForecast ONLY
+        records = row.monthDataForecast?.[monthKey] || [];
+      } else {
+        // Real column: use monthData and FILTER OUT any forecast records that might have slipped through
+        const allRecords = row.monthData[monthKey] || [];
+        records = allRecords.filter(r => !isForecastRecord(r));
+      }
+    } else {
+      // For other months, use monthData (which contains all records)
+      records = row.monthData[monthKey] || [];
+    }
     const totalAmount = Math.round(records.reduce((sum, r) => sum + Number(r.amount || 0), 0));
     const displayValue = totalAmount !== 0 ? formatMoneyNoDecimals(totalAmount, 'ARS', { sign: 'auto' }) : '-';
-    const isForecast = isForecastMonth(monthKey);
+    const isForecast = isForecastColumn || (monthKey !== currentMonthKey && isForecastMonth(monthKey, currentMonthKey));
 
     return (
       <div
         className={`px-1 py-0.5 text-sm text-center ${isSelected ? 'bg-blue-200 dark:bg-blue-800/50' : 'hover:bg-amber-100 dark:hover:bg-amber-900/30'} ${isForecast ? 'opacity-60 italic' : ''}`}
-        onClick={() => handleCellClick(rowIndex, monthKey, gridType)}
+        onClick={() => handleCellClick(rowIndex, monthKey, gridType, isForecastColumn)}
         onDoubleClick={() => handleCellDoubleClick(rowIndex, monthKey, gridType)}
         style={{ minHeight: '20px', cursor: 'default' }}
         title={isForecast ? (t('forecast') || 'Pronóstico') : (t('expandToEditDetails') || 'Expandir para editar detalles individuales')}
@@ -776,7 +1050,20 @@ export default function Grid() {
   };
 
   const renderGrid = (gridData, rowTotals, monthTotals, gridType, title) => {
-    const lastPastMonthIndex = getLastPastMonthIndex(months);
+    const lastPastMonthIndex = getLastPastMonthIndex(months, currentMonthKey);
+    
+    // Build columns array with current month split into real and forecast
+    const columns = [];
+    months.forEach((monthKey, index) => {
+      if (monthKey === currentMonthKey) {
+        // Add real column
+        columns.push({ monthKey, isForecast: false, isCurrentMonth: true });
+        // Add forecast column
+        columns.push({ monthKey, isForecast: true, isCurrentMonth: true });
+      } else {
+        columns.push({ monthKey, isForecast: false, isCurrentMonth: false });
+      }
+    });
     
     return (
     <div className="mb-8">
@@ -796,17 +1083,19 @@ export default function Grid() {
               <th className="sticky left-0 border-2 border-blue-300 dark:border-blue-700 px-1.5 py-1.5 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 z-20" style={{ width: 100, minWidth: 100 }}>
                 {t('category') || 'Categoría'}
               </th>
-              {months.map((monthKey, index) => {
-                const [year, month] = monthKey.split('-').map(Number);
-                const isLastPastMonth = index === lastPastMonthIndex;
+              {columns.map((col, index) => {
+                const [year, month] = col.monthKey.split('-').map(Number);
+                const isLastPastMonth = index === lastPastMonthIndex || (col.isCurrentMonth && !col.isForecast);
+                const prevCol = index > 0 ? columns[index - 1] : null;
+                const showForecastDivider = col.isCurrentMonth && col.isForecast;
                 return (
                   <th
-                    key={monthKey}
-                    className={`border-2 border-blue-300 dark:border-blue-700 px-1 py-1 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                    key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                    className={`border-2 border-blue-300 dark:border-blue-700 px-1 py-1 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-blue-50 dark:bg-blue-900/20 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                     style={{ width: 85, minWidth: 85 }}
-                    title={`${formatMonthYearLabel(year, month)} ${year}`}
+                    title={`${formatMonthYearLabel(year, month)} ${year}${col.isForecast ? ' (Forecast)' : ' (Real)'}`}
                   >
-                    {formatMonthYearLabel(year, month)}
+                    {formatMonthYearLabel(year, month)}{col.isForecast ? ' F' : ''}
                   </th>
                 );
               })}
@@ -846,15 +1135,16 @@ export default function Grid() {
                         <span className="truncate text-center flex-1 min-w-0">{capitalizeWords(row.key)}</span>
                       </div>
                     </td>
-                    {months.map((monthKey, index) => {
-                      const isLastPastMonth = index === lastPastMonthIndex;
+                    {columns.map((col, index) => {
+                      const isLastPastMonth = index === lastPastMonthIndex || (col.isCurrentMonth && !col.isForecast);
+                      const showForecastDivider = col.isCurrentMonth && col.isForecast;
                       return (
                         <td
-                          key={monthKey}
-                          className={`border-r-2 border-gray-300 dark:border-gray-600 p-0 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                          key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                          className={`border-r-2 border-gray-300 dark:border-gray-600 p-0 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                           style={{ width: 85, minWidth: 85 }}
                         >
-                          {renderCell(row, monthKey, rowIndex, gridType)}
+                          {renderCell(row, col.monthKey, rowIndex, gridType, col.isForecast)}
                         </td>
                       );
                     })}
@@ -874,16 +1164,18 @@ export default function Grid() {
                                   <th className="sticky left-0 border-2 border-indigo-300 dark:border-indigo-700 px-1.5 py-1.5 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40 z-20" style={{ width: 100, minWidth: 100 }}>
                                     {t('concept') || 'Concepto'}
                                   </th>
-                                  {months.map((monthKey) => {
-                                    const [year, month] = monthKey.split('-').map(Number);
+                                  {columns.map((col) => {
+                                    const [year, month] = col.monthKey.split('-').map(Number);
+                                    const isLastPastMonth = col.isCurrentMonth && !col.isForecast;
+                                    const showForecastDivider = col.isCurrentMonth && col.isForecast;
                                     return (
                                       <th
-                                        key={monthKey}
-                                        className="border-2 border-indigo-300 dark:border-indigo-700 px-1 py-1 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40"
+                                        key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                                        className={`border-2 border-indigo-300 dark:border-indigo-700 px-1 py-1 text-center text-xs font-semibold text-gray-800 dark:text-gray-100 bg-indigo-100 dark:bg-indigo-900/40 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                                         style={{ width: 85, minWidth: 85 }}
-                                        title={`${formatMonthYearLabel(year, month)} ${year}`}
+                                        title={`${formatMonthYearLabel(year, month)} ${year}${col.isForecast ? ' (Forecast)' : ' (Real)'}`}
                                       >
-                                        {formatMonthYearLabel(year, month)}
+                                        {formatMonthYearLabel(year, month)}{col.isForecast ? ' F' : ''}
                                       </th>
                                     );
                                   })}
@@ -926,22 +1218,41 @@ export default function Grid() {
                                             <span className="truncate">{capitalizeWords(concept.label)}</span>
                                           </div>
                                         </td>
-                                        {months.map((monthKey, index) => {
+                                        {columns.map((col, index) => {
                                           // Find all records for this concept and month
-                                          const monthRecords = concept.records.filter(r => r.monthKey === monthKey);
-                                          const isForecast = isForecastMonth(monthKey);
-                                          const isLastPastMonth = index === lastPastMonthIndex;
+                                          let monthRecords = [];
+                                          if (col.isCurrentMonth && col.isForecast) {
+                                            monthRecords = concept.records.filter(r => {
+                                              const rMonthKey = r.monthKey || `${extractYearMonth(r.date)?.year}-${String(extractYearMonth(r.date)?.month).padStart(2, '0')}`;
+                                              return rMonthKey === col.monthKey && isForecastRecord(r);
+                                            });
+                                          } else {
+                                            // Real column or other months
+                                            monthRecords = concept.records.filter(r => {
+                                              const rMonthKey = r.monthKey || `${extractYearMonth(r.date)?.year}-${String(extractYearMonth(r.date)?.month).padStart(2, '0')}`;
+                                              if (rMonthKey !== col.monthKey) return false;
+                                              if (col.isCurrentMonth) {
+                                                // For current month real column, ONLY show non-forecast records
+                                                return !isForecastRecord(r);
+                                              }
+                                              // For other months, show all records
+                                              return true;
+                                            });
+                                          }
+                                          const isForecast = col.isForecast || (col.monthKey !== currentMonthKey && isForecastMonth(col.monthKey, currentMonthKey));
+                                          const isLastPastMonth = index === lastPastMonthIndex || (col.isCurrentMonth && !col.isForecast);
+                                          const showForecastDivider = col.isCurrentMonth && col.isForecast;
                                           
                                           // Check if this cell is being edited (either has a record being edited, or is an empty cell being edited)
-                                          const editingRecord = monthRecords.find(r => editingDetail?.recordId === r.id && editingDetail?.monthKey === monthKey);
-                                          const isEditingEmpty = editingDetail?.recordId === null && editingDetail?.monthKey === monthKey && editingDetail?.conceptLabel === concept.label;
+                                          const editingRecord = monthRecords.find(r => editingDetail?.recordId === r.id && editingDetail?.monthKey === col.monthKey);
+                                          const isEditingEmpty = editingDetail?.recordId === null && editingDetail?.monthKey === col.monthKey && editingDetail?.conceptLabel === concept.label;
                                           const isEditing = !!editingRecord || isEditingEmpty;
                                           
                                           if (isEditing && (editingRecord || isEditingEmpty)) {
                                             return (
                                               <td
-                                                key={monthKey}
-                                                className={`border-r-2 border-indigo-200 dark:border-indigo-700 p-0 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                                                key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                                                className={`border-r-2 border-indigo-200 dark:border-indigo-700 p-0 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                                                 style={{ width: 85, minWidth: 85 }}
                                               >
                                                 <input
@@ -975,10 +1286,10 @@ export default function Grid() {
                                           
                                           return (
                                             <td
-                                              key={monthKey}
-                                              className={`border-r-2 border-indigo-200 dark:border-indigo-700 px-1 py-1 text-sm text-center hover:bg-indigo-100 dark:hover:bg-indigo-900/30 cursor-cell ${isForecast ? 'opacity-60 italic' : ''} ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                                              key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                                              className={`border-r-2 border-indigo-200 dark:border-indigo-700 px-1 py-1 text-sm text-center hover:bg-indigo-100 dark:hover:bg-indigo-900/30 cursor-cell ${isForecast ? 'opacity-60 italic' : ''} ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                                               style={{ width: 85, minWidth: 85 }}
-                                              onDoubleClick={() => handleDetailDoubleClick(firstRecord || null, monthKey, gridType, concept.label, row.key)}
+                                              onDoubleClick={() => handleDetailDoubleClick(firstRecord || null, col.monthKey, gridType, concept.label, row.key)}
                                               title={isForecast ? (t('forecast') || 'Pronóstico') : (t('doubleClickToEdit') || 'Doble click para editar')}
                                             >
                                               {monthAmount !== 0 ? formatMoneyNoDecimals(Math.round(monthAmount), 'ARS', { sign: 'auto' }) : '-'}
@@ -998,14 +1309,33 @@ export default function Grid() {
                                   <td className="sticky left-0 border-2 border-indigo-400 dark:border-indigo-600 px-1.5 py-1.5 text-xs text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50 z-20" style={{ width: 100, minWidth: 100 }}>
                                     {t('total') || 'Total'}
                                   </td>
-                                  {months.map((monthKey) => {
-                                    const monthTotal = row.records
-                                      .filter(r => r.monthKey === monthKey)
-                                      .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+                                  {columns.map((col) => {
+                                    let monthTotal = 0;
+                                    if (col.isCurrentMonth && col.isForecast) {
+                                      // Forecast column: sum forecast records for this row (all concepts)
+                                      const forecastRecords = row.records.filter(r => {
+                                        const rMonthKey = r.monthKey || `${extractYearMonth(r.date)?.year}-${String(extractYearMonth(r.date)?.month).padStart(2, '0')}`;
+                                        return rMonthKey === col.monthKey && isForecastRecord(r);
+                                      });
+                                      monthTotal = forecastRecords.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+                                    } else {
+                                      // Real column or other months: sum real records for this row (all concepts)
+                                      const realRecords = row.records.filter(r => {
+                                        const rMonthKey = r.monthKey || `${extractYearMonth(r.date)?.year}-${String(extractYearMonth(r.date)?.month).padStart(2, '0')}`;
+                                        if (rMonthKey !== col.monthKey) return false;
+                                        if (col.isCurrentMonth) {
+                                          return !isForecastRecord(r);
+                                        }
+                                        return true;
+                                      });
+                                      monthTotal = realRecords.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+                                    }
+                                    const isLastPastMonth = col.isCurrentMonth && !col.isForecast;
+                                    const showForecastDivider = col.isCurrentMonth && col.isForecast;
                                     return (
                                       <td
-                                        key={monthKey}
-                                        className="border-2 border-indigo-400 dark:border-indigo-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50"
+                                        key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                                        className={`border-2 border-indigo-400 dark:border-indigo-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-indigo-200 dark:bg-indigo-900/50 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                                         style={{ width: 85, minWidth: 85 }}
                                       >
                                         {formatMoneyNoDecimals(Math.round(monthTotal), 'ARS', { sign: 'auto' })}
@@ -1032,15 +1362,30 @@ export default function Grid() {
               <td className="sticky left-0 border-2 border-gray-400 dark:border-gray-600 px-1.5 py-1.5 text-xs text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 z-20" style={{ width: 100, minWidth: 100 }}>
                 {t('total') || 'Total'}
               </td>
-              {months.map((monthKey, index) => {
-                const isLastPastMonth = index === lastPastMonthIndex;
+              {columns.map((col, index) => {
+                const isLastPastMonth = index === lastPastMonthIndex || (col.isCurrentMonth && !col.isForecast);
+                const showForecastDivider = col.isCurrentMonth && col.isForecast;
+                // Calculate total for this column
+                let columnTotal = 0;
+                if (col.isCurrentMonth && col.isForecast) {
+                  // Forecast column: sum forecast records
+                  gridData.forEach((row) => {
+                    const forecastRecords = row.monthDataForecast?.[col.monthKey] || [];
+                    forecastRecords.forEach((record) => {
+                      columnTotal += Number(record.amount || 0);
+                    });
+                  });
+                } else {
+                  // Real column or other months: sum real records
+                  columnTotal = monthTotals.get(col.monthKey) || 0;
+                }
                 return (
                   <td
-                    key={monthKey}
-                    className={`border-2 border-gray-400 dark:border-gray-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''}`}
+                    key={`${col.monthKey}-${col.isForecast ? 'forecast' : 'real'}`}
+                    className={`border-2 border-gray-400 dark:border-gray-600 px-1 py-1 text-sm text-center font-bold text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-900 ${isLastPastMonth ? 'border-r-4 border-r-dashed border-r-gray-500 dark:border-r-gray-400' : ''} ${showForecastDivider ? 'border-l-4 border-l-dashed border-l-gray-500 dark:border-l-gray-400' : ''}`}
                     style={{ width: 85, minWidth: 85 }}
                   >
-                    {formatMoneyNoDecimals(Math.round(monthTotals.get(monthKey) || 0), 'ARS', { sign: 'auto' })}
+                    {formatMoneyNoDecimals(Math.round(columnTotal), 'ARS', { sign: 'auto' })}
                   </td>
                 );
               })}
@@ -1076,6 +1421,32 @@ export default function Grid() {
                   { value: '', label: t('allYears') || 'Todos los años' },
                   ...availableYears.map((year) => ({ value: String(year), label: String(year) }))
                 ]}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="current-month-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Mes Actual:
+              </label>
+              <CustomSelect
+                id="current-month-select"
+                value={currentMonthKey}
+                onChange={(v) => {
+                  // Comparar si el nuevo mes es posterior al actual
+                  const [currentYear, currentMonth] = currentMonthKey.split('-').map(Number);
+                  const [newYear, newMonth] = v.split('-').map(Number);
+                  
+                  const isMovingForward = newYear > currentYear || (newYear === currentYear && newMonth > currentMonth);
+                  
+                  if (isMovingForward) {
+                    // Mostrar confirmación antes de avanzar
+                    setPendingMonthKey(v);
+                    setShowMonthChangeConfirm(true);
+                  } else {
+                    // Permitir retroceder sin confirmación
+                    setCurrentMonthKey(v);
+                  }
+                }}
+                options={getAvailableCurrentMonthOptions(currentMonthKey)}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -1249,6 +1620,51 @@ export default function Grid() {
                     Guardar
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de cambio de mes */}
+      {showMonthChangeConfirm && pendingMonthKey && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowMonthChangeConfirm(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">
+                Confirmar Cambio de Mes
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Estás a punto de cambiar el mes actual a <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  {(() => {
+                    const [year, month] = pendingMonthKey.split('-').map(Number);
+                    return `${getMonthNameInSpanish(month)} ${year}`;
+                  })()}
+                </span>.
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mb-6">
+                Una vez confirmado, no podrás volver a meses anteriores. ¿Deseas continuar?
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowMonthChangeConfirm(false);
+                    setPendingMonthKey(null);
+                  }}
+                  className="h-9 px-4 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentMonthKey(pendingMonthKey);
+                    setShowMonthChangeConfirm(false);
+                    setPendingMonthKey(null);
+                  }}
+                  className="h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Confirmar
+                </button>
               </div>
             </div>
           </div>

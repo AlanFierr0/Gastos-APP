@@ -113,9 +113,30 @@ export default function Investment() {
 
   useEffect(() => {
     ensureInvestmentCategories();
-    // Solo cargar inversiones y precios desde BD (no actualizar desde APIs)
-    loadInvestments();
-    loadGbpPrice();
+    // Actualizar precios automáticamente al abrir la página, luego cargar inversiones
+    async function updateAndLoad() {
+      try {
+        // Primero cargar inversiones con precios actuales (por si falla la actualización)
+        await loadInvestments();
+        loadGbpPrice();
+        
+        // Luego intentar actualizar precios desde las APIs (silenciosamente)
+        // Usar force=true para permitir actualización automática aunque haya pasado poco tiempo
+        try {
+          await api.updatePrices(true);
+          await api.updateInvestmentPrices();
+          // Recargar inversiones después de actualizar precios
+          await loadInvestments();
+          loadGbpPrice();
+        } catch (updateError) {
+          // Si falla la actualización, mantener los precios anteriores (ya cargados arriba)
+          console.log('Price update failed, using cached prices:', updateError?.response?.data?.message || updateError?.message);
+        }
+      } catch (error) {
+        console.error('Error loading investments:', error);
+      }
+    }
+    updateAndLoad();
   }, []);
 
   async function loadGbpPrice() {

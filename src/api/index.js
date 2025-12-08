@@ -189,9 +189,17 @@ export async function deleteInvestment(id) {
   return data;
 }
 
-export async function updatePrices() {
-  const { data } = await http.post('/prices/update');
-  return data;
+export async function updatePrices(force = false) {
+  console.log('[API] updatePrices called - POST /prices/update', force ? '(force)' : '');
+  try {
+    const url = force ? '/prices/update?force=true' : '/prices/update';
+    const { data } = await http.post(url);
+    console.log('[API] updatePrices response:', data);
+    return data;
+  } catch (error) {
+    console.error('[API] updatePrices error:', error);
+    throw error;
+  }
 }
 
 export async function updateInvestmentPrices() {

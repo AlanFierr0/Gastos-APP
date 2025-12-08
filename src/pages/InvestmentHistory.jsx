@@ -32,16 +32,23 @@ export default function InvestmentHistory() {
     // Actualizar precios primero, luego cargar inversiones
     async function updateAndLoad() {
       try {
-        // Primero actualizar los precios desde las APIs
-        await api.updatePrices();
-        // Luego actualizar los precios de las inversiones
-        await api.updateInvestmentPrices();
-        // Finalmente cargar las inversiones
+        // Primero cargar inversiones con precios actuales (por si falla la actualización)
         await loadInvestments();
+        
+        // Luego intentar actualizar los precios desde las APIs (silenciosamente)
+        // Usar force=true para permitir actualización automática aunque haya pasado poco tiempo
+        try {
+          await api.updatePrices(true);
+          // Luego actualizar los precios de las inversiones
+          await api.updateInvestmentPrices();
+          // Finalmente recargar las inversiones con precios actualizados
+          await loadInvestments();
+        } catch (updateError) {
+          // Si falla la actualización, mantener los precios anteriores (ya cargados arriba)
+          console.log('Price update failed, using cached prices:', updateError?.response?.data?.message || updateError?.message);
+        }
       } catch (error) {
-        console.error('Error updating prices silently:', error);
-        // Si falla la actualización, cargar igualmente las inversiones
-        await loadInvestments();
+        console.error('Error loading investments:', error);
       }
     }
     updateAndLoad();

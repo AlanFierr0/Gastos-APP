@@ -14,8 +14,6 @@ export default function Dashboard() {
   const [periodType, setPeriodType] = useState('month'); // 'month' | 'year'
   const [selectedPeriod, setSelectedPeriod] = useState(() => getLastNonForecastMonth());
   const [gbpPrice, setGbpPrice] = useState(null);
-  const [updatingPrices, setUpdatingPrices] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState(null);
   const navigate = useNavigate();
   
   // Calculate current month on each render to ensure it's always fresh
@@ -268,43 +266,6 @@ export default function Dashboard() {
     }
   }
 
-  async function handleUpdatePrices() {
-    const MIN_UPDATE_INTERVAL = 300000; // 5 minutos en milisegundos
-    const now = Date.now();
-    
-    // Verificar si han pasado 5 minutos desde la última actualización
-    if (lastUpdateTime && (now - lastUpdateTime) < MIN_UPDATE_INTERVAL) {
-      const secondsRemaining = Math.ceil((MIN_UPDATE_INTERVAL - (now - lastUpdateTime)) / 1000);
-      const minutesRemaining = Math.ceil(secondsRemaining / 60);
-      alert(`Por favor espera ${minutesRemaining} minuto(s) antes de actualizar nuevamente`);
-      return;
-    }
-
-    setUpdatingPrices(true);
-    try {
-      // Actualizar precios desde las APIs
-      await api.updatePrices();
-      // Actualizar precios de inversiones
-      await api.updateInvestmentPrices();
-      // Recargar inversiones
-      const data = await api.getInvestments();
-      setInvestments(data || []);
-      // Recargar precio de GBP
-      loadGbpPrice();
-      // Guardar tiempo de actualización
-      setLastUpdateTime(Date.now());
-    } catch (error) {
-      console.error('Error updating prices:', error);
-      if (error?.response?.data?.message) {
-        alert(error.response.data.message);
-      } else {
-        alert('Error al actualizar precios. Por favor intenta nuevamente.');
-      }
-    } finally {
-      setUpdatingPrices(false);
-    }
-  }
-
   useEffect(() => {
     if (investments.length > 0) {
       // Cargar operaciones para todas las inversiones
@@ -450,14 +411,6 @@ export default function Dashboard() {
           <p className="text-[#616f89] dark:text-gray-400">{t('summarySub')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleUpdatePrices}
-            disabled={updatingPrices}
-            className="h-9 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-            title={lastUpdateTime ? `Última actualización: ${new Date(lastUpdateTime).toLocaleTimeString()}` : 'Actualizar precios'}
-          >
-            {updatingPrices ? 'Actualizando...' : 'Actualizar Precios'}
-          </button>
           <button
             onClick={() => handleGoToInvestment('investment')}
             className="h-9 px-3 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
