@@ -218,7 +218,18 @@ export function AppProvider({ children }) {
         id,
         categoryId,
       };
-      setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...optimistic, category: categoryId ? categoryById(categoryId) : e.category } : e)));
+      // Asegurarse de que la nota se mantenga en el estado optimístico
+      setExpenses((prev) => prev.map((e) => {
+        if (e.id === id) {
+          const updated = { ...e, ...optimistic, category: categoryId ? categoryById(categoryId) : e.category };
+          // Si se está actualizando la nota, asegurarse de que se mantenga
+          if (updates.note !== undefined) {
+            updated.note = updates.note;
+          }
+          return updated;
+        }
+        return e;
+      }));
       try {
         const payload = {
           ...(concept !== undefined ? { concept } : {}),

@@ -257,7 +257,6 @@ export default function Upload() {
   const [showMonthlySummaryForm, setShowMonthlySummaryForm] = useState(false);
   const [editingMonthlyRecord, setEditingMonthlyRecord] = useState(null);
   const [failedSections, setFailedSections] = useState([]); // Array de { index, title, content, error }
-  const [allSections, setAllSections] = useState([]); // Guardar todas las secciones para poder reanalizar
   const [monthlySummaryYear, setMonthlySummaryYear] = useState(new Date().getFullYear());
   const [monthlySummaryMonth, setMonthlySummaryMonth] = useState(new Date().getMonth() + 1);
   const [selectedBank, setSelectedBank] = useState(null); // { categoryId, concept }
@@ -306,9 +305,6 @@ export default function Upload() {
         setLoading(false);
         return;
       }
-
-      // Guardar todas las secciones para poder reanalizar
-      setAllSections(sections);
 
       setStatus(`Procesando ${sections.length} secciones automáticamente...`);
       
@@ -449,6 +445,14 @@ export default function Upload() {
     updated[index] = updatedRecord;
     setMonthlySummaryResults({ ...monthlySummaryResults, records: updated });
     setEditingMonthlyRecord(null);
+  };
+
+  const handleUpdateMonthlyRecordConcept = (index, concept) => {
+    if (!monthlySummaryResults) return;
+    const updated = [...monthlySummaryResults.records];
+    updated[index] = { ...updated[index], concept };
+    setMonthlySummaryResults({ ...monthlySummaryResults, records: updated });
+    // No cerrar el modo de edición, solo actualizar el valor
   };
 
   const handleRemoveMonthlyRecord = (index) => {
@@ -630,12 +634,28 @@ export default function Upload() {
     <div className="flex flex-col gap-6">
       <header>
         <p className="text-4xl font-black tracking-[-0.033em]">{t('uploadTitle')}</p>
-        <p className="text-[#616f89] dark:text-gray-400">{t('uploadSubtitle')}</p>
+        <p className="text-[#616f89] dark:text-gray-400 mb-4">
+          Tenés dos opciones para importar tus datos:
+        </p>
+        <div className="space-y-2 text-sm text-[#616f89] dark:text-gray-400">
+          <p>
+            <strong className="text-gray-800 dark:text-gray-200">1. Importar desde Excel/CSV:</strong> Ideal para importar registros individuales de gastos e ingresos con fechas específicas. El sistema detecta automáticamente el año según el nombre de cada hoja del archivo.
+          </p>
+          <p>
+            <strong className="text-gray-800 dark:text-gray-200">2. Cargar Resumen mensual (PDF):</strong> Perfecto para importar resúmenes bancarios mensuales en PDF. Usa inteligencia artificial para identificar automáticamente categorías y conceptos de tus gastos e ingresos consolidados por mes.
+          </p>
+        </div>
       </header>
 
       {!previewData ? (
         <>
           <Card>
+            <div className="mb-4">
+              <p className="text-xl font-bold mb-2">1. Importar desde Excel o CSV</p>
+              <p className="text-sm text-[#616f89] dark:text-gray-400">
+                Subí un archivo Excel (.xlsx) o CSV con tus registros individuales de gastos e ingresos. Cada registro debe tener una fecha específica. El sistema detecta automáticamente el año según el nombre de cada hoja del archivo.
+              </p>
+            </div>
             <form onSubmit={handleSubmit(onFileSelect)} className="flex flex-col gap-4">
               <input 
                 type="file" 
@@ -660,9 +680,9 @@ export default function Upload() {
           <Card>
             <div className="flex flex-col gap-4">
               <div>
-                <p className="text-xl font-bold mb-2">Cargar Resumen mensual</p>
+                <p className="text-xl font-bold mb-2">2. Cargar Resumen mensual desde PDF</p>
                 <p className="text-sm text-[#616f89] dark:text-gray-400">
-                  Carga un resumen mensual de tus gastos e ingresos en formato PDF. Esta opción permite importar datos consolidados por mes usando inteligencia artificial para identificar categorías y conceptos.
+                  Subí un resumen bancario mensual en formato PDF (por ejemplo, resúmenes de cuenta de tu banco). El sistema usa inteligencia artificial para extraer automáticamente los gastos e ingresos, identificar categorías y conceptos, y consolidarlos por mes. Ideal para importar varios meses de una vez desde documentos bancarios.
                 </p>
               </div>
               {!showMonthlySummaryForm ? (
@@ -1080,7 +1100,6 @@ export default function Upload() {
                       const mappingStatus = record.mappingStatus || (record.needsManualMapping ? 'needs_mapping' : (!record.categoryId || !record.concept ? 'needs_mapping' : 'ready'));
                       const needsMapping = mappingStatus === 'needs_mapping';
                       const needsConfirmation = mappingStatus === 'needs_confirmation';
-                      const isReady = mappingStatus === 'ready';
                       const category = categories.find(c => c.id === record.categoryId);
                       return (
                         <tr key={index} className={`border-b border-gray-100 dark:border-gray-800 ${
@@ -1121,8 +1140,19 @@ export default function Upload() {
                               <input
                                 type="text"
                                 value={record.concept || ''}
-                                onChange={(e) => handleSaveMonthlyRecord(index, { ...record, concept: e.target.value })}
+                                onChange={(e) => handleUpdateMonthlyRecordConcept(index, e.target.value)}
+                                onBlur={() => setEditingMonthlyRecord(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    setEditingMonthlyRecord(null);
+                                  } else if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    setEditingMonthlyRecord(null);
+                                  }
+                                }}
                                 className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
+                                autoFocus
                               />
                             ) : (
                               record.concept || '-'
@@ -1254,7 +1284,7 @@ export default function Upload() {
             </p>
           </div>
           <div className="space-y-3">
-            {failedSections.map((failedSection, idx) => (
+            {failedSections.map((failedSection) => (
               <div 
                 key={failedSection.index} 
                 className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800"

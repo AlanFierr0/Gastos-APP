@@ -56,44 +56,125 @@ function getMonthNameInSpanish(month) {
   return monthNames[month - 1];
 }
 
-function getAvailableCurrentMonthOptions(selectedCurrentMonthKey = null) {
+function getAvailableCurrentMonthOptions(selectedCurrentMonthKey = null, isAdminMode = false, expenses = [], income = []) {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
   
-  // If a selectedCurrentMonthKey is provided, use it as the minimum allowed month
-  let minYear, minMonth;
-  if (selectedCurrentMonthKey) {
-    [minYear, minMonth] = selectedCurrentMonthKey.split('-').map(Number);
-  } else {
-    // Start from previous month (currentMonth - 1)
-    // If currentMonth is 1 (January), previous month is December of previous year
-    minYear = currentMonth === 1 ? currentYear - 1 : currentYear;
-    minMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-  }
-  
   const options = [];
   
-  // Add months from minMonth/minYear to end of next year
-  // First, add remaining months of minYear (from minMonth to December)
-  for (let month = minMonth; month <= 12; month++) {
-    const monthKey = `${minYear}-${String(month).padStart(2, '0')}`;
-    const label = `${getMonthNameInSpanish(month)} ${minYear}`;
-    options.push({ value: monthKey, label });
-  }
-  
-  // Add all months of next year (minYear + 1)
-  for (let month = 1; month <= 12; month++) {
-    const monthKey = `${minYear + 1}-${String(month).padStart(2, '0')}`;
-    const label = `${getMonthNameInSpanish(month)} ${minYear + 1}`;
-    options.push({ value: monthKey, label });
+  if (isAdminMode) {
+    // En modo admin, obtener el primer mes disponible de los datos
+    const monthSet = new Set();
+    
+    // Procesar expenses
+    expenses.forEach((e) => {
+      const ym = extractYearMonth(e.date);
+      if (ym) {
+        const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        monthSet.add(monthKey);
+      }
+    });
+    
+    // Procesar income
+    income.forEach((i) => {
+      const ym = extractYearMonth(i.date);
+      if (ym) {
+        const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        monthSet.add(monthKey);
+      }
+    });
+    
+    // Obtener el primer mes disponible
+    const sortedMonths = Array.from(monthSet).sort((a, b) => a.localeCompare(b));
+    if (sortedMonths.length > 0) {
+      const [minYear, minMonth] = sortedMonths[0].split('-').map(Number);
+      
+      // Agregar meses desde el primero disponible hasta 3 años más
+      for (let month = minMonth; month <= 12; month++) {
+        const monthKey = `${minYear}-${String(month).padStart(2, '0')}`;
+        const label = `${getMonthNameInSpanish(month)} ${minYear}`;
+        options.push({ value: monthKey, label });
+      }
+      
+      // Agregar años siguientes (hasta 3 años más)
+      for (let year = minYear + 1; year <= minYear + 3; year++) {
+        for (let month = 1; month <= 12; month++) {
+          const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+          const label = `${getMonthNameInSpanish(month)} ${year}`;
+          options.push({ value: monthKey, label });
+        }
+      }
+    } else {
+      // Si no hay datos, usar hace 2 años desde el mes actual
+      const minYear = currentYear - 2;
+      for (let month = currentMonth; month <= 12; month++) {
+        const monthKey = `${minYear}-${String(month).padStart(2, '0')}`;
+        const label = `${getMonthNameInSpanish(month)} ${minYear}`;
+        options.push({ value: monthKey, label });
+      }
+      
+      for (let year = minYear + 1; year <= minYear + 3; year++) {
+        for (let month = 1; month <= 12; month++) {
+          const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+          const label = `${getMonthNameInSpanish(month)} ${year}`;
+          options.push({ value: monthKey, label });
+        }
+      }
+    }
+  } else {
+    // Comportamiento normal: incluir el mes actual + meses futuros del año actual
+    // Solo mostrar enero del año siguiente si el mes actual es diciembre
+    if (selectedCurrentMonthKey) {
+      const [selectedYear, selectedMonth] = selectedCurrentMonthKey.split('-').map(Number);
+      
+      // Siempre incluir el mes actual seleccionado primero
+      const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+      const currentLabel = `${getMonthNameInSpanish(selectedMonth)} ${selectedYear}`;
+      options.push({ value: currentMonthKey, label: currentLabel });
+      
+      // Si el mes seleccionado es diciembre, solo mostrar enero del año siguiente
+      if (selectedMonth === 12) {
+        const monthKey = `${selectedYear + 1}-01`;
+        const label = `Enero ${selectedYear + 1}`;
+        options.push({ value: monthKey, label });
+      } else {
+        // Mostrar meses futuros del año actual (desde el mes siguiente al seleccionado hasta diciembre)
+        // NO incluir enero del año siguiente, solo hasta diciembre
+        for (let month = selectedMonth + 1; month <= 12; month++) {
+          const monthKey = `${selectedYear}-${String(month).padStart(2, '0')}`;
+          const label = `${getMonthNameInSpanish(month)} ${selectedYear}`;
+          options.push({ value: monthKey, label });
+        }
+      }
+    } else {
+      // Si no hay mes seleccionado, usar el mes actual del sistema
+      // Incluir el mes actual primero
+      const currentMonthKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+      const currentLabel = `${getMonthNameInSpanish(currentMonth)} ${currentYear}`;
+      options.push({ value: currentMonthKey, label: currentLabel });
+      
+      // Mostrar meses futuros del año actual (desde el mes siguiente al actual hasta diciembre)
+      // Solo incluir enero del año siguiente si el mes actual es diciembre
+      if (currentMonth === 12) {
+        const monthKey = `${currentYear + 1}-01`;
+        const label = `Enero ${currentYear + 1}`;
+        options.push({ value: monthKey, label });
+      } else {
+        for (let month = currentMonth + 1; month <= 12; month++) {
+          const monthKey = `${currentYear}-${String(month).padStart(2, '0')}`;
+          const label = `${getMonthNameInSpanish(month)} ${currentYear}`;
+          options.push({ value: monthKey, label });
+        }
+      }
+    }
   }
   
   return options;
 }
 
 export default function Grid() {
-  const { expenses, income, updateExpense, updateIncome, addExpense, addIncome, categories, t } = useApp();
+  const { expenses, income, updateExpense, updateIncome, addExpense, addIncome, removeExpense, removeIncome, categories, t } = useApp();
   const navigate = useNavigate();
   const [selectedCell, setSelectedCell] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
@@ -101,7 +182,8 @@ export default function Grid() {
   const [expandedCategory, setExpandedCategory] = useState(null); // Category key that is expanded
   const [editingDetail, setEditingDetail] = useState(null); // { recordId, monthKey, gridType, value }
   const [selectedYear, setSelectedYear] = useState(null); // null = all years, or specific year number
-  const [showForecast, setShowForecast] = useState(false); // Toggle para mostrar/ocultar forecast
+  const [showForecast, setShowForecast] = useState(true); // Toggle para mostrar/ocultar forecast
+  const [isAdminMode, setIsAdminMode] = useState(false); // Toggle para modo admin (permite retroceder meses)
   const [cellEditModal, setCellEditModal] = useState(null); // { rowIndex, monthKey, gridType, records, currentTotal, rowKey }
   const [modalValue, setModalValue] = useState(''); // Valor único para todas las operaciones
   const [modalNote, setModalNote] = useState('');
@@ -121,8 +203,11 @@ export default function Grid() {
   // Estado para el modal de confirmación de cambio de mes
   const [showMonthChangeConfirm, setShowMonthChangeConfirm] = useState(false);
   const [pendingMonthKey, setPendingMonthKey] = useState(null);
+  
+  // Ref para guardar el mes anterior y detectar cambios
+  const previousMonthKeyRef = useRef(currentMonthKey);
 
-  // Get all unique years
+  // Get all unique years, including next year if current month allows it
   const availableYears = useMemo(() => {
     const yearSet = new Set();
     
@@ -138,6 +223,12 @@ export default function Grid() {
       if (ym) yearSet.add(ym.year);
     });
 
+    // Always include the current year and next year
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    yearSet.add(currentYear);
+    yearSet.add(currentYear + 1);
+
     // Sort years descending (most recent first)
     return Array.from(yearSet).sort((a, b) => b - a);
   }, [expenses, income]);
@@ -147,73 +238,237 @@ export default function Grid() {
     if (selectedYear === null && availableYears.length > 0) {
       setSelectedYear(availableYears[0]);
     }
-  }, [availableYears, selectedYear]);
+  }, [availableYears]);
 
-  // Ensure currentMonthKey is valid when selectedYear changes
+  // El mes actual se mantiene igual sin importar el año seleccionado
+  // No cambiar currentMonthKey cuando cambia selectedYear
+
+  // Cuando cambia el mes actual, mover los forecast del mes anterior a la columna F del nuevo mes actual
+  // y eliminar los registros forecast del mes que acaba de terminar
   useEffect(() => {
-    if (selectedYear !== null) {
-      const [currentYear] = currentMonthKey.split('-').map(Number);
-      if (currentYear !== selectedYear) {
-        // If current month is not in selected year, set to first month of selected year
-        const newMonthKey = `${selectedYear}-01`;
-        setCurrentMonthKey(newMonthKey);
+    const previousMonthKey = previousMonthKeyRef.current;
+    
+    // Solo procesar si hay un cambio real de mes (no en el primer render)
+    if (previousMonthKey && previousMonthKey !== currentMonthKey) {
+      // Verificar si estamos avanzando de mes (no retrocediendo)
+      const [prevYear, prevMonth] = previousMonthKey.split('-').map(Number);
+      const [currYear, currMonth] = currentMonthKey.split('-').map(Number);
+      const isMovingForward = currYear > prevYear || (currYear === prevYear && currMonth > prevMonth);
+      
+      // Solo mover forecast si estamos avanzando de mes
+      if (!isMovingForward) {
+        previousMonthKeyRef.current = currentMonthKey;
+        return;
       }
+
+      // 1. ELIMINAR registros forecast del mes que acaba de terminar (previousMonthKey)
+      // El mes que acaba de terminar es el previousMonthKey, debemos eliminar todos sus registros forecast
+      const expiredForecastExpenses = (expenses || []).filter(expense => {
+        const ym = extractYearMonth(expense.date);
+        if (!ym) return false;
+        const expenseMonthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        const note = (expense.note || '').toLowerCase();
+        return expenseMonthKey === previousMonthKey && note.includes('forecast');
+      });
+
+      const expiredForecastIncome = (income || []).filter(inc => {
+        const ym = extractYearMonth(inc.date);
+        if (!ym) return false;
+        const incomeMonthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        const note = (inc.note || '').toLowerCase();
+        return incomeMonthKey === previousMonthKey && note.includes('forecast');
+      });
+
+      // 2. Los registros forecast son los del mes FUTURO respecto al mes anterior
+      // Si estábamos en noviembre, los forecast eran los de diciembre
+      // Cuando cambiamos a diciembre, esos registros de diciembre deben aparecer en "Dic F" (forecast)
+      // NO mover la fecha, solo asegurarse de que tengan "forecast" en la nota para que aparezcan en la columna F
+      const [prevYearNum, prevMonthNum] = previousMonthKey.split('-').map(Number);
+      let oldForecastMonthKey;
+      if (prevMonthNum === 12) {
+        oldForecastMonthKey = `${prevYearNum + 1}-01`;
+      } else {
+        oldForecastMonthKey = `${prevYearNum}-${String(prevMonthNum + 1).padStart(2, '0')}`;
+      }
+
+      // Encontrar todos los registros del mes que era forecast cuando estábamos en el mes anterior
+      // Si esos registros son del mes actual, deben tener "forecast" en la nota para aparecer en la columna F
+      const forecastExpenses = (expenses || []).filter(expense => {
+        const ym = extractYearMonth(expense.date);
+        if (!ym) return false;
+        const expenseMonthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        return expenseMonthKey === oldForecastMonthKey && expenseMonthKey === currentMonthKey;
+      });
+
+      const forecastIncome = (income || []).filter(inc => {
+        const ym = extractYearMonth(inc.date);
+        if (!ym) return false;
+        const incomeMonthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        return incomeMonthKey === oldForecastMonthKey && incomeMonthKey === currentMonthKey;
+      });
+
+      // Procesar ambas acciones: eliminar forecast del mes terminado y actualizar forecast del mes actual
+      const processForecastRecords = async () => {
+        // Eliminar registros forecast del mes que acaba de terminar SOLO si NO estamos en modo admin
+        if (!isAdminMode) {
+          for (const expense of expiredForecastExpenses) {
+            await removeExpense(expense.id);
+          }
+
+          for (const inc of expiredForecastIncome) {
+            await removeIncome(inc.id);
+          }
+        }
+
+        // Actualizar expenses forecast - NO cambiar la fecha, solo agregar "forecast" a la nota
+        for (const expense of forecastExpenses) {
+          let noteToKeep = expense.note || '';
+          if (!noteToKeep.toLowerCase().includes('forecast')) {
+            const [year] = currentMonthKey.split('-').map(Number);
+            noteToKeep = noteToKeep ? `${noteToKeep} Forecast ${year}` : `Forecast ${year}`;
+          }
+          
+          await updateExpense(expense.id, {
+            note: noteToKeep
+          });
+        }
+
+        // Actualizar income forecast - NO cambiar la fecha, solo agregar "forecast" a la nota
+        for (const inc of forecastIncome) {
+          let noteToKeep = inc.note || '';
+          if (!noteToKeep.toLowerCase().includes('forecast')) {
+            const [year] = currentMonthKey.split('-').map(Number);
+            noteToKeep = noteToKeep ? `${noteToKeep} Forecast ${year}` : `Forecast ${year}`;
+          }
+          
+          await updateIncome(inc.id, {
+            note: noteToKeep
+          });
+        }
+      };
+
+      processForecastRecords();
     }
-  }, [selectedYear]);
+
+    // Actualizar el ref con el nuevo mes actual
+    previousMonthKeyRef.current = currentMonthKey;
+  }, [currentMonthKey, expenses, income, updateExpense, updateIncome, removeExpense, removeIncome, isAdminMode]);
+
 
   // Get all unique months (filtered by selectedYear if set, and forecast if toggle is off)
   const months = useMemo(() => {
     const monthSet = new Set();
     
-    // Process expenses
-    (expenses || []).forEach((e) => {
-      const ym = extractYearMonth(e.date);
-      if (!ym) return;
-      // Filter by year if selectedYear is set
-      if (selectedYear !== null && ym.year !== selectedYear) return;
-      const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
-      // Filter forecast months if toggle is off
-      if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
-      monthSet.add(monthKey);
-    });
+    // Si hay un año seleccionado, solo procesar datos de ese año específico
+    if (selectedYear !== null) {
+      // Process expenses - solo del año seleccionado
+      (expenses || []).forEach((e) => {
+        const ym = extractYearMonth(e.date);
+        if (!ym || ym.year !== selectedYear) return;
+        const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        // Filter forecast months if toggle is off
+        if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
+        monthSet.add(monthKey);
+      });
 
-    // Process income
-    (income || []).forEach((i) => {
-      const ym = extractYearMonth(i.date);
-      if (!ym) return;
-      // Filter by year if selectedYear is set
-      if (selectedYear !== null && ym.year !== selectedYear) return;
-      const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
-      // Filter forecast months if toggle is off
-      if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
-      monthSet.add(monthKey);
-    });
+      // Process income - solo del año seleccionado
+      (income || []).forEach((i) => {
+        const ym = extractYearMonth(i.date);
+        if (!ym || ym.year !== selectedYear) return;
+        const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        // Filter forecast months if toggle is off
+        if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
+        monthSet.add(monthKey);
+      });
 
-    // Always include currentMonthKey if it's not already in the set
-    if (currentMonthKey && !monthSet.has(currentMonthKey)) {
-      monthSet.add(currentMonthKey);
+      // Always include currentMonthKey if it's not already in the set (solo si es del año seleccionado)
+      if (currentMonthKey) {
+        const [currentMonthYear] = currentMonthKey.split('-').map(Number);
+        if (currentMonthYear === selectedYear && !monthSet.has(currentMonthKey)) {
+          monthSet.add(currentMonthKey);
+        }
+      }
+
+      // Si showForecast está activado, incluir todos los meses del año seleccionado (solo Ene-Dic)
+      if (showForecast) {
+        for (let month = 1; month <= 12; month++) {
+          const monthKey = `${selectedYear}-${String(month).padStart(2, '0')}`;
+          monthSet.add(monthKey);
+        }
+      }
+    } else {
+      // Si no hay año seleccionado, procesar todos los datos
+      (expenses || []).forEach((e) => {
+        const ym = extractYearMonth(e.date);
+        if (!ym) return;
+        const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        // Filter forecast months if toggle is off
+        if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
+        monthSet.add(monthKey);
+      });
+
+      (income || []).forEach((i) => {
+        const ym = extractYearMonth(i.date);
+        if (!ym) return;
+        const monthKey = `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+        // Filter forecast months if toggle is off
+        if (!showForecast && isForecastMonth(monthKey, currentMonthKey)) return;
+        monthSet.add(monthKey);
+      });
+
+      // Always include currentMonthKey if it's not already in the set
+      if (currentMonthKey && !monthSet.has(currentMonthKey)) {
+        monthSet.add(currentMonthKey);
+      }
+
+      // Si showForecast está activado y no hay año seleccionado, incluir todos los meses desde el primero con datos hasta el futuro
+      if (showForecast && monthSet.size > 0) {
+        const sortedMonths = Array.from(monthSet).sort((a, b) => a.localeCompare(b));
+        const firstMonth = sortedMonths[0];
+        const lastMonth = sortedMonths[sortedMonths.length - 1];
+        
+        const [firstYear, firstMonthNum] = firstMonth.split('-').map(Number);
+        const [lastYear] = lastMonth.split('-').map(Number);
+        
+        // Obtener el año actual del sistema
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        
+        // Determinar hasta qué año/mes incluir (hasta el año siguiente al último mes con datos o año actual + 1)
+        const maxYear = Math.max(lastYear, currentYear) + 1;
+        const maxMonth = 12;
+        
+        // Agregar todos los meses desde el primero hasta el máximo
+        for (let year = firstYear; year <= maxYear; year++) {
+          const startMonth = year === firstYear ? firstMonthNum : 1;
+          const endMonth = year === maxYear ? maxMonth : 12;
+          
+          for (let month = startMonth; month <= endMonth; month++) {
+            const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+            monthSet.add(monthKey);
+          }
+        }
+      }
     }
 
     // Sort months ascending (January first, December last)
-    return Array.from(monthSet).sort((a, b) => a.localeCompare(b));
+    // Filtrar para asegurar que si hay selectedYear, solo se incluyan meses de ese año
+    const sortedMonths = Array.from(monthSet).sort((a, b) => a.localeCompare(b));
+    if (selectedYear !== null) {
+      // Filtrar estrictamente solo meses del año seleccionado
+      return sortedMonths.filter(monthKey => {
+        const [year] = monthKey.split('-').map(Number);
+        return year === selectedYear;
+      });
+    }
+    return sortedMonths;
   }, [expenses, income, selectedYear, showForecast, currentMonthKey]);
 
   // Helper function to check if a record is forecast
   const isForecastRecord = (record) => {
     if (!record) return false;
     const note = record.note || '';
-    const isForecast = note.toLowerCase().includes('forecast');
-    // Debug log (remove after fixing)
-    if (isForecast && record.monthKey) {
-      console.log('Forecast record detected:', {
-        id: record.id,
-        monthKey: record.monthKey,
-        note: record.note,
-        currentMonthKey,
-        amount: record.amount
-      });
-    }
-    return isForecast;
+    return note.toLowerCase().includes('forecast');
   };
 
   // Process expenses data (filtered by selectedYear if set)
@@ -258,26 +513,9 @@ export default function Grid() {
           if (isForecast) {
             // Forecast records MUST go to monthDataForecast ONLY - NEVER to monthData
             monthDataForecast[recordMonthKey].push(record);
-            // Debug log
-            console.log('✓ Forecast record added to monthDataForecast:', {
-              rowKey: row.key,
-              recordMonthKey,
-              currentMonthKey,
-              recordId: record.id,
-              note: record.note,
-              amount: record.amount
-            });
           } else {
             // Real records go to monthData ONLY - NEVER to monthDataForecast
             monthData[recordMonthKey].push(record);
-            // Debug log for real records in current month
-            if (record.note && record.note.toLowerCase().includes('forecast')) {
-              console.error('ERROR: Real record has forecast note!', {
-                rowKey: row.key,
-                recordId: record.id,
-                note: record.note
-              });
-            }
           }
         } else {
           // For other months, use normal structure (all records go to monthData, regardless of forecast status)
@@ -292,11 +530,6 @@ export default function Grid() {
       if (currentMonthKey && monthData[currentMonthKey]) {
         const forecastInMonthData = monthData[currentMonthKey].filter(r => isForecastRecord(r));
         if (forecastInMonthData.length > 0) {
-          console.error('ERROR: Found forecast records in monthData for current month!', {
-            rowKey: row.key,
-            currentMonthKey,
-            forecastRecords: forecastInMonthData.map(r => ({ id: r.id, note: r.note }))
-          });
           // Remove forecast records from monthData
           monthData[currentMonthKey] = monthData[currentMonthKey].filter(r => !isForecastRecord(r));
           // Add them to monthDataForecast
@@ -361,26 +594,9 @@ export default function Grid() {
           if (isForecast) {
             // Forecast records MUST go to monthDataForecast ONLY - NEVER to monthData
             monthDataForecast[recordMonthKey].push(record);
-            // Debug log
-            console.log('✓ Forecast record added to monthDataForecast:', {
-              rowKey: row.key,
-              recordMonthKey,
-              currentMonthKey,
-              recordId: record.id,
-              note: record.note,
-              amount: record.amount
-            });
           } else {
             // Real records go to monthData ONLY - NEVER to monthDataForecast
             monthData[recordMonthKey].push(record);
-            // Debug log for real records in current month
-            if (record.note && record.note.toLowerCase().includes('forecast')) {
-              console.error('ERROR: Real record has forecast note!', {
-                rowKey: row.key,
-                recordId: record.id,
-                note: record.note
-              });
-            }
           }
         } else {
           // For other months, use normal structure (all records go to monthData, regardless of forecast status)
@@ -395,11 +611,6 @@ export default function Grid() {
       if (currentMonthKey && monthData[currentMonthKey]) {
         const forecastInMonthData = monthData[currentMonthKey].filter(r => isForecastRecord(r));
         if (forecastInMonthData.length > 0) {
-          console.error('ERROR: Found forecast records in monthData for current month!', {
-            rowKey: row.key,
-            currentMonthKey,
-            forecastRecords: forecastInMonthData.map(r => ({ id: r.id, note: r.note }))
-          });
           // Remove forecast records from monthData
           monthData[currentMonthKey] = monthData[currentMonthKey].filter(r => !isForecastRecord(r));
           // Add them to monthDataForecast
@@ -506,7 +717,6 @@ export default function Grid() {
     }
     // El popup solo se abre cuando se edita un concepto dentro de una categoría expandida
     // Las celdas principales de categorías no abren popup
-    return;
   };
 
   const handleSave = async () => {
@@ -545,6 +755,17 @@ export default function Grid() {
         const record = records[0];
         const newAmount = Number(record.amount || 0) + difference;
         const updates = { amount: newAmount };
+        
+        // Si es columna forecast del mes actual, asegurarse de mantener "forecast" en la nota
+        if (monthKey === currentMonthKey && isForecast) {
+          let noteToKeep = record.note || '';
+          if (!noteToKeep.toLowerCase().includes('forecast')) {
+            const [year] = currentMonthKey.split('-').map(Number);
+            noteToKeep = noteToKeep ? `${noteToKeep} Forecast ${year}` : `Forecast ${year}`;
+          }
+          updates.note = noteToKeep;
+        }
+        
         if (gridType === 'expense') {
           await updateExpense(record.id, updates);
         } else {
@@ -804,7 +1025,7 @@ export default function Grid() {
         }
       }
     } catch (error) {
-      console.error('Error saving:', error);
+      // Error saving silently ignored
     } finally {
       setCellEditModal(null);
       setModalValue('');
@@ -903,9 +1124,16 @@ export default function Grid() {
     const gridData = gridType === 'expense' ? expensesGridData : incomeGridData;
     
     // Build columns array for navigation
+    const nowDate = new Date();
+    const sysCurrentYear = nowDate.getFullYear();
+    const isPastYearCheck = selectedYear !== null && selectedYear < sysCurrentYear;
+    const [currentMonthYear] = currentMonthKey.split('-').map(Number);
+    const isCurrentMonthInSelectedYear = selectedYear !== null && currentMonthYear === selectedYear;
+    const shouldShowForecast = !isPastYearCheck && isCurrentMonthInSelectedYear;
+    
     const columns = [];
     months.forEach((mk) => {
-      if (mk === currentMonthKey) {
+      if (shouldShowForecast && mk === currentMonthKey) {
         columns.push({ monthKey: mk, isForecast: false });
         columns.push({ monthKey: mk, isForecast: true });
       } else {
@@ -1016,9 +1244,17 @@ export default function Grid() {
       );
     }
 
-    // For current month, use separate data for real and forecast
-    let records = [];
-    if (monthKey === currentMonthKey) {
+    // Obtener el año del mes actual seleccionado para determinar si mostrar forecast
+    const nowDate = new Date();
+    const sysCurrentYear = nowDate.getFullYear();
+    const isPastYearCheck = selectedYear !== null && selectedYear < sysCurrentYear;
+    const [currentMonthYear] = currentMonthKey.split('-').map(Number);
+    const isCurrentMonthInSelectedYear = selectedYear !== null && currentMonthYear === selectedYear;
+    const shouldShowForecast = !isPastYearCheck && isCurrentMonthInSelectedYear;
+    
+    // For current month, use separate data for real and forecast (solo si corresponde)
+    let records;
+    if (shouldShowForecast && monthKey === currentMonthKey) {
       // For current month, use the appropriate data source based on column type
       if (isForecastColumn) {
         // Forecast column: use monthDataForecast ONLY
@@ -1029,12 +1265,12 @@ export default function Grid() {
         records = allRecords.filter(r => !isForecastRecord(r));
       }
     } else {
-      // For other months, use monthData (which contains all records)
+      // For other months or when forecast separation is not needed, use monthData (which contains all records)
       records = row.monthData[monthKey] || [];
     }
     const totalAmount = Math.round(records.reduce((sum, r) => sum + Number(r.amount || 0), 0));
     const displayValue = totalAmount !== 0 ? formatMoneyNoDecimals(totalAmount, 'ARS', { sign: 'auto' }) : '-';
-    const isForecast = isForecastColumn || (monthKey !== currentMonthKey && isForecastMonth(monthKey, currentMonthKey));
+    const isForecast = shouldShowForecast && (isForecastColumn || (monthKey !== currentMonthKey && isForecastMonth(monthKey, currentMonthKey)));
 
     return (
       <div
@@ -1050,12 +1286,23 @@ export default function Grid() {
   };
 
   const renderGrid = (gridData, rowTotals, monthTotals, gridType, title) => {
-    const lastPastMonthIndex = getLastPastMonthIndex(months, currentMonthKey);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const isPastYear = selectedYear !== null && selectedYear < currentYear;
     
-    // Build columns array with current month split into real and forecast
+    // Obtener el año del mes actual seleccionado
+    const [currentMonthYear] = currentMonthKey.split('-').map(Number);
+    const isCurrentMonthInSelectedYear = selectedYear !== null && currentMonthYear === selectedYear;
+    
+    // Solo mostrar separación de forecast si el mes actual está en el año seleccionado y no es año pasado
+    const shouldShowForecast = !isPastYear && isCurrentMonthInSelectedYear;
+    
+    const lastPastMonthIndex = getLastPastMonthIndex(months, shouldShowForecast ? currentMonthKey : null);
+    
+    // Build columns array with current month split into real and forecast (solo si corresponde)
     const columns = [];
-    months.forEach((monthKey, index) => {
-      if (monthKey === currentMonthKey) {
+    months.forEach((monthKey) => {
+      if (shouldShowForecast && monthKey === currentMonthKey) {
         // Add real column
         columns.push({ monthKey, isForecast: false, isCurrentMonth: true });
         // Add forecast column
@@ -1086,7 +1333,6 @@ export default function Grid() {
               {columns.map((col, index) => {
                 const [year, month] = col.monthKey.split('-').map(Number);
                 const isLastPastMonth = index === lastPastMonthIndex || (col.isCurrentMonth && !col.isForecast);
-                const prevCol = index > 0 ? columns[index - 1] : null;
                 const showForecastDivider = col.isCurrentMonth && col.isForecast;
                 return (
                   <th
@@ -1220,7 +1466,7 @@ export default function Grid() {
                                         </td>
                                         {columns.map((col, index) => {
                                           // Find all records for this concept and month
-                                          let monthRecords = [];
+                                          let monthRecords;
                                           if (col.isCurrentMonth && col.isForecast) {
                                             monthRecords = concept.records.filter(r => {
                                               const rMonthKey = r.monthKey || `${extractYearMonth(r.date)?.year}-${String(extractYearMonth(r.date)?.month).padStart(2, '0')}`;
@@ -1310,7 +1556,7 @@ export default function Grid() {
                                     {t('total') || 'Total'}
                                   </td>
                                   {columns.map((col) => {
-                                    let monthTotal = 0;
+                                    let monthTotal;
                                     if (col.isCurrentMonth && col.isForecast) {
                                       // Forecast column: sum forecast records for this row (all concepts)
                                       const forecastRecords = row.records.filter(r => {
@@ -1415,40 +1661,70 @@ export default function Grid() {
               </label>
               <CustomSelect
                 id="year-select"
-                value={selectedYear !== null ? String(selectedYear) : ''}
-                onChange={(v) => setSelectedYear(v === '' ? null : Number(v))}
-                options={[
-                  { value: '', label: t('allYears') || 'Todos los años' },
-                  ...availableYears.map((year) => ({ value: String(year), label: String(year) }))
-                ]}
+                value={selectedYear !== null ? String(selectedYear) : String(availableYears[0] || new Date().getFullYear())}
+                onChange={(v) => setSelectedYear(Number(v))}
+                options={availableYears.map((year) => ({ value: String(year), label: String(year) }))}
               />
             </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="current-month-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Mes Actual:
-              </label>
-              <CustomSelect
-                id="current-month-select"
-                value={currentMonthKey}
-                onChange={(v) => {
-                  // Comparar si el nuevo mes es posterior al actual
-                  const [currentYear, currentMonth] = currentMonthKey.split('-').map(Number);
-                  const [newYear, newMonth] = v.split('-').map(Number);
-                  
-                  const isMovingForward = newYear > currentYear || (newYear === currentYear && newMonth > currentMonth);
-                  
-                  if (isMovingForward) {
-                    // Mostrar confirmación antes de avanzar
-                    setPendingMonthKey(v);
-                    setShowMonthChangeConfirm(true);
-                  } else {
-                    // Permitir retroceder sin confirmación
-                    setCurrentMonthKey(v);
-                  }
-                }}
-                options={getAvailableCurrentMonthOptions(currentMonthKey)}
-              />
-            </div>
+            {(() => {
+              const now = new Date();
+              const currentYear = now.getFullYear();
+              const isPastYear = selectedYear !== null && selectedYear < currentYear;
+              
+              // Obtener el año del mes actual seleccionado
+              const [currentMonthYear] = currentMonthKey.split('-').map(Number);
+              const isCurrentMonthInSelectedYear = selectedYear !== null && currentMonthYear === selectedYear;
+              
+              // Solo mostrar el selector de mes actual si:
+              // 1. No es un año pasado Y
+              // 2. El mes actual está en el año seleccionado
+              if (isPastYear || !isCurrentMonthInSelectedYear) {
+                return null;
+              }
+              
+              return (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="current-month-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Mes Actual:
+                  </label>
+                  <CustomSelect
+                    id="current-month-select"
+                    value={currentMonthKey}
+                    onChange={(v) => {
+                      const [currentYear, currentMonth] = currentMonthKey.split('-').map(Number);
+                      const [newYear, newMonth] = v.split('-').map(Number);
+                      
+                      // Si se selecciona enero y el mes actual es diciembre, cambiar el año automáticamente
+                      if (currentMonth === 12 && newMonth === 1 && newYear === currentYear + 1) {
+                        // Cambiar el año seleccionado al año siguiente
+                        setSelectedYear(newYear);
+                        setCurrentMonthKey(v);
+                        return;
+                      }
+                      
+                      // Si el modo admin está activado, permitir cambiar sin confirmación
+                      if (isAdminMode) {
+                        setCurrentMonthKey(v);
+                        return;
+                      }
+                      
+                      // Comparar si el nuevo mes es posterior al actual
+                      const isMovingForward = newYear > currentYear || (newYear === currentYear && newMonth > currentMonth);
+                      
+                      if (isMovingForward) {
+                        // Mostrar confirmación antes de avanzar
+                        setPendingMonthKey(v);
+                        setShowMonthChangeConfirm(true);
+                      } else {
+                        // Permitir retroceder sin confirmación
+                        setCurrentMonthKey(v);
+                      }
+                    }}
+                    options={getAvailableCurrentMonthOptions(currentMonthKey, isAdminMode, expenses, income)}
+                  />
+                </div>
+              );
+            })()}
             <div className="flex items-center gap-2">
               <label htmlFor="forecast-toggle" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('showForecast') || 'Mostrar Forecast'}:
@@ -1466,6 +1742,27 @@ export default function Grid() {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     showForecast ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="admin-toggle" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Admin:
+              </label>
+              <button
+                id="admin-toggle"
+                type="button"
+                onClick={() => setIsAdminMode(!isAdminMode)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                  isAdminMode ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+                role="switch"
+                aria-checked={isAdminMode}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isAdminMode ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>
@@ -1657,6 +1954,14 @@ export default function Grid() {
                 </button>
                 <button
                   onClick={() => {
+                    const [currentYear, currentMonth] = currentMonthKey.split('-').map(Number);
+                    const [newYear, newMonth] = pendingMonthKey.split('-').map(Number);
+                    
+                    // Si se selecciona enero y el mes actual es diciembre, cambiar el año automáticamente
+                    if (currentMonth === 12 && newMonth === 1 && newYear === currentYear + 1) {
+                      setSelectedYear(newYear);
+                    }
+                    
                     setCurrentMonthKey(pendingMonthKey);
                     setShowMonthChangeConfirm(false);
                     setPendingMonthKey(null);
