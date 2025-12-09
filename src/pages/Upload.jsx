@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Card from '../components/Card.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -256,6 +256,7 @@ export default function Upload() {
   const [monthlySummaryResults, setMonthlySummaryResults] = useState(null);
   const [showMonthlySummaryForm, setShowMonthlySummaryForm] = useState(false);
   const [editingMonthlyRecord, setEditingMonthlyRecord] = useState(null);
+  const editingRowRef = useRef(null);
   const [failedSections, setFailedSections] = useState([]); // Array de { index, title, content, error }
   const [monthlySummaryYear, setMonthlySummaryYear] = useState(new Date().getFullYear());
   const [monthlySummaryMonth, setMonthlySummaryMonth] = useState(new Date().getMonth() + 1);
@@ -280,6 +281,42 @@ export default function Upload() {
       categoryName: bankCategory.name,
     }));
   }, [categories, expenses]);
+
+  // Listener para cerrar la edición cuando se hace click fuera del área de edición
+  useEffect(() => {
+    if (editingMonthlyRecord === null) return;
+    
+    const handleClickOutside = (event) => {
+      if (editingRowRef.current) {
+        const clickedInside = editingRowRef.current.contains(event.target);
+        // También verificar si el click fue en el dropdown del CustomSelect o en el botón
+        const dropdown = document.querySelector('[data-custom-select-dropdown]');
+        const clickedInDropdown = dropdown && dropdown.contains(event.target);
+        // Verificar si el click fue en el contenedor del CustomSelect o en cualquier elemento relacionado
+        const customSelectContainer = event.target.closest('[data-custom-select-container]');
+        const clickedInCustomSelect = customSelectContainer !== null;
+        // Verificar si el click fue en el contenedor principal del CustomSelect (el div con ref selectRef)
+        const customSelectDiv = event.target.closest('.relative');
+        const isCustomSelectParent = customSelectDiv && customSelectDiv.querySelector('button[type="button"]');
+        
+        // Solo cerrar si el click fue completamente fuera del área de edición y del CustomSelect
+        if (!clickedInside && !clickedInDropdown && !clickedInCustomSelect && !isCustomSelectParent) {
+          setEditingMonthlyRecord(null);
+        }
+      }
+    };
+    
+    // Agregar listener con un delay para evitar conflictos con el click que abrió la edición
+    // El delay permite que el CustomSelect procese primero su evento
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside, true);
+    }, 150);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside, true);
+    };
+  }, [editingMonthlyRecord]);
 
   const handleLoadMonthlySummary = async () => {
     if (!monthlySummaryFile) {
@@ -329,6 +366,14 @@ export default function Upload() {
           if (result.records && Array.isArray(result.records)) {
             allRecords.push(...result.records);
           }
+          
+          // Mostrar información sobre mantenimientos de bancos si existe
+          if (result.consolidatedTaxesRecord) {
+            const taxesRecord = result.consolidatedTaxesRecord;
+            const taxesMessage = `💰 Mantenimientos de bancos: Se consolidaron registros de "Impuestos, cargos e intereses" en ${taxesRecord.categoryName} - ${taxesRecord.concept} por ${formatMoneyNoDecimals(taxesRecord.amount, taxesRecord.currency || 'ARS', { sign: 'auto' })}`;
+            setStatus(`Procesando sección ${i + 1}/${sections.length}: ${section.title}...\n${taxesMessage}`);
+          }
+          
           successCount++;
         } catch (e) {
           errorCount++;
@@ -362,6 +407,10 @@ export default function Upload() {
       // Guardar secciones fallidas
       setFailedSections(newFailedSections);
 
+      // Contar registros de mantenimientos de bancos consolidados
+      const bankMaintenanceRecords = allRecords.filter(r => r.isTaxesSection === true && r.note && r.note.includes('consolidados'));
+      const bankMaintenanceTotal = bankMaintenanceRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
+      
       // Combinar todos los resultados
       setMonthlySummaryResults({
         records: allRecords,
@@ -372,11 +421,21 @@ export default function Upload() {
       setShowMonthlySummaryForm(false);
       setMonthlySummaryFile(null);
       
+      // Construir mensaje final con información de mantenimientos de bancos
+      let finalMessage = '';
       if (errorCount === 0) {
-        setStatus(`✓ Procesamiento completado: ${allRecords.length} registros encontrados en ${successCount} secciones`);
+        finalMessage = `✓ Procesamiento completado: ${allRecords.length} registros encontrados en ${successCount} secciones`;
       } else {
-        setStatus(`Procesamiento completado: ${allRecords.length} registros de ${successCount} secciones exitosas, ${errorCount} secciones con errores (puedes reanalizarlas)`);
+        finalMessage = `Procesamiento completado: ${allRecords.length} registros de ${successCount} secciones exitosas, ${errorCount} secciones con errores (puedes reanalizarlas)`;
       }
+      
+      if (bankMaintenanceRecords.length > 0) {
+        const bankCategory = bankMaintenanceRecords[0]?.categoryName || 'mantenimiento bancos';
+        const bankConcept = bankMaintenanceRecords[0]?.concept || '';
+        finalMessage += `\n\n💰 Mantenimientos de bancos: Se consolidaron ${bankMaintenanceRecords.length} registro(s) de "Impuestos, cargos e intereses" en ${bankCategory} - ${bankConcept} por un total de ${formatMoneyNoDecimals(bankMaintenanceTotal, 'ARS', { sign: 'auto' })}.`;
+      }
+      
+      setStatus(finalMessage);
     } catch (e) {
       const errorMsg = getErrorMessage(e);
       setStatus(errorMsg);
@@ -439,12 +498,14 @@ export default function Upload() {
     setEditingMonthlyRecord(index);
   };
 
-  const handleSaveMonthlyRecord = (index, updatedRecord) => {
+  const handleSaveMonthlyRecord = (index, updatedRecord, keepEditing = false) => {
     if (!monthlySummaryResults) return;
     const updated = [...monthlySummaryResults.records];
     updated[index] = updatedRecord;
     setMonthlySummaryResults({ ...monthlySummaryResults, records: updated });
-    setEditingMonthlyRecord(null);
+    if (!keepEditing) {
+      setEditingMonthlyRecord(null);
+    }
   };
 
   const handleUpdateMonthlyRecordConcept = (index, concept) => {
@@ -453,6 +514,18 @@ export default function Upload() {
     updated[index] = { ...updated[index], concept };
     setMonthlySummaryResults({ ...monthlySummaryResults, records: updated });
     // No cerrar el modo de edición, solo actualizar el valor
+  };
+
+  const handleConfirmAll = () => {
+    if (!monthlySummaryResults) return;
+    const updated = monthlySummaryResults.records.map(record => {
+      const mappingStatus = record.mappingStatus || (record.needsManualMapping ? 'needs_mapping' : (!record.categoryId || !record.concept ? 'needs_mapping' : 'ready'));
+      if (mappingStatus === 'needs_confirmation') {
+        return { ...record, mappingStatus: 'ready' };
+      }
+      return record;
+    });
+    setMonthlySummaryResults({ ...monthlySummaryResults, records: updated });
   };
 
   const handleRemoveMonthlyRecord = (index) => {
@@ -1082,6 +1155,33 @@ export default function Upload() {
 
           {monthlySummaryResults.records.length > 0 ? (
             <Card>
+              <div className="mb-4 flex justify-between items-center">
+                <div className="text-sm">
+                  <strong className="text-green-600 dark:text-green-400">Listos:</strong> {monthlySummaryResults.records.filter(r => {
+                    const mappingStatus = r.mappingStatus || (r.needsManualMapping ? 'needs_mapping' : (!r.categoryId || !r.concept ? 'needs_mapping' : 'ready'));
+                    return mappingStatus === 'ready';
+                  }).length} | 
+                  <strong className="ml-2 text-yellow-600 dark:text-yellow-400">Necesitan confirmación:</strong> {monthlySummaryResults.records.filter(r => {
+                    const mappingStatus = r.mappingStatus || (r.needsManualMapping ? 'needs_mapping' : (!r.categoryId || !r.concept ? 'needs_mapping' : 'ready'));
+                    return mappingStatus === 'needs_confirmation';
+                  }).length} | 
+                  <strong className="ml-2 text-red-600 dark:text-red-400">Necesitan mapeo:</strong> {monthlySummaryResults.records.filter(r => {
+                    const mappingStatus = r.mappingStatus || (r.needsManualMapping ? 'needs_mapping' : (!r.categoryId || !r.concept ? 'needs_mapping' : 'ready'));
+                    return mappingStatus === 'needs_mapping' || !r.categoryId || !r.concept;
+                  }).length}
+                </div>
+                {monthlySummaryResults.records.some(r => {
+                  const mappingStatus = r.mappingStatus || (r.needsManualMapping ? 'needs_mapping' : (!r.categoryId || !r.concept ? 'needs_mapping' : 'ready'));
+                  return mappingStatus === 'needs_confirmation';
+                }) && (
+                  <button
+                    onClick={handleConfirmAll}
+                    className="h-10 px-4 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 transition-colors"
+                  >
+                    Confirmar Todos
+                  </button>
+                )}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -1098,62 +1198,82 @@ export default function Upload() {
                   <tbody>
                     {monthlySummaryResults.records.map((record, index) => {
                       const mappingStatus = record.mappingStatus || (record.needsManualMapping ? 'needs_mapping' : (!record.categoryId || !record.concept ? 'needs_mapping' : 'ready'));
-                      const needsMapping = mappingStatus === 'needs_mapping';
+                      const needsMapping = mappingStatus === 'needs_mapping' || !record.categoryId || !record.concept;
                       const needsConfirmation = mappingStatus === 'needs_confirmation';
                       const category = categories.find(c => c.id === record.categoryId);
                       return (
-                        <tr key={index} className={`border-b border-gray-100 dark:border-gray-800 ${
-                          needsMapping ? 'bg-red-50 dark:bg-red-900/20' : 
-                          needsConfirmation ? 'bg-yellow-50 dark:bg-yellow-900/20' : 
-                          'bg-white dark:bg-gray-900'
-                        }`}>
+                        <tr 
+                          key={index} 
+                          ref={editingMonthlyRecord === index ? editingRowRef : null}
+                          className={`border-b border-gray-100 dark:border-gray-800 ${
+                            needsMapping ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 
+                            needsConfirmation ? 'bg-yellow-50 dark:bg-yellow-900/20' : 
+                            'bg-white dark:bg-gray-900'
+                          }`}
+                          onClick={(e) => {
+                            // Si estamos editando este registro, no permitir que clicks en la fila cierren la edición
+                            if (editingMonthlyRecord === index) {
+                              e.stopPropagation();
+                            }
+                          }}
+                        >
                           <td className="py-2 px-3 whitespace-nowrap">{record.kind === 'income' ? 'Ingreso' : 'Gasto'}</td>
-                          <td className="py-2 px-3 break-words">
+                          <td className="py-2 px-3 break-words" onClick={(e) => editingMonthlyRecord === index && e.stopPropagation()} onMouseDown={(e) => editingMonthlyRecord === index && e.stopPropagation()}>
                             {editingMonthlyRecord === index ? (
-                              <CustomSelect
-                                value={record.categoryId || ''}
-                                onChange={(v) => {
-                                  const selectedCat = categories.find(c => c.id === v);
-                                  handleSaveMonthlyRecord(index, {
-                                    ...record,
-                                    categoryId: v,
-                                    categoryName: selectedCat?.name || record.categoryName,
-                                    mappingStatus: 'ready',
-                                  });
-                                }}
-                                options={[
-                                  { value: '', label: 'Seleccionar...' },
-                                  ...categories
-                                    .filter(c => c.type.name.toLowerCase() === record.kind)
-                                    .map(cat => ({ value: cat.id, label: capitalizeWords(cat.name) }))
-                                ]}
-                                className="w-full"
-                              />
+                              <div 
+                                onClick={(e) => e.stopPropagation()} 
+                                onMouseDown={(e) => e.stopPropagation()}
+                                data-custom-select-container="true"
+                              >
+                                <CustomSelect
+                                  value={record.categoryId || ''}
+                                  onChange={(v) => {
+                                    const selectedCat = categories.find(c => c.id === v);
+                                    handleSaveMonthlyRecord(index, {
+                                      ...record,
+                                      categoryId: v,
+                                      categoryName: selectedCat?.name || record.categoryName,
+                                      mappingStatus: 'ready',
+                                    }, true); // Mantener el modo de edición abierto
+                                  }}
+                                  options={[
+                                    { value: '', label: 'Seleccionar...' },
+                                    ...categories
+                                      .filter(c => c.type.name.toLowerCase() === record.kind)
+                                      .map(cat => ({ value: cat.id, label: capitalizeWords(cat.name) }))
+                                  ]}
+                                  className="w-full"
+                                />
+                              </div>
                             ) : (
                               <span className={needsMapping ? 'text-yellow-600 dark:text-yellow-400' : ''}>
                                 {category ? capitalizeWords(category.name) : record.categoryName || 'Sin categoría'}
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-3 break-words">
+                          <td className="py-2 px-3 break-words" onClick={(e) => editingMonthlyRecord === index && e.stopPropagation()} onMouseDown={(e) => editingMonthlyRecord === index && e.stopPropagation()}>
                             {editingMonthlyRecord === index ? (
-                              <input
-                                type="text"
-                                value={record.concept || ''}
-                                onChange={(e) => handleUpdateMonthlyRecordConcept(index, e.target.value)}
-                                onBlur={() => setEditingMonthlyRecord(null)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    setEditingMonthlyRecord(null);
-                                  } else if (e.key === 'Escape') {
-                                    e.preventDefault();
-                                    setEditingMonthlyRecord(null);
-                                  }
-                                }}
-                                className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
-                                autoFocus
-                              />
+                              <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  value={record.concept || ''}
+                                  onChange={(e) => handleUpdateMonthlyRecordConcept(index, e.target.value)}
+                                  // Removido onBlur - ahora se maneja con el listener de click fuera del área
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      setEditingMonthlyRecord(null);
+                                    } else if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      setEditingMonthlyRecord(null);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 rounded bg-white dark:bg-gray-800 text-sm"
+                                  autoFocus
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                />
+                              </div>
                             ) : (
                               record.concept || '-'
                             )}

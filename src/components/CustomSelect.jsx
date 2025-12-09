@@ -25,13 +25,21 @@ export default function CustomSelect({ value, onChange, options = [], className 
       updatePosition();
 
       const handleClickOutside = (event) => {
+        // Buscar el dropdown usando el atributo data
         const dropdown = document.querySelector('[data-custom-select-dropdown]');
+        
+        // Verificar si el click fue en el botón o en el contenedor del select
+        const clickedOnSelect = selectRef.current && selectRef.current.contains(event.target);
         const clickedOnButton = buttonRef.current && buttonRef.current.contains(event.target);
         const clickedOnDropdown = dropdown && dropdown.contains(event.target);
         
-        if (!clickedOnButton && !clickedOnDropdown) {
-          setIsOpen(false);
+        // Si se hace click en cualquier parte del select (botón, contenedor o dropdown), no cerrar
+        if (clickedOnSelect || clickedOnButton || clickedOnDropdown) {
+          return;
         }
+        
+        // Solo cerrar si se hace click completamente fuera
+        setIsOpen(false);
       };
 
       // Update position on scroll to keep dropdown aligned with button
@@ -39,18 +47,19 @@ export default function CustomSelect({ value, onChange, options = [], className 
         updatePosition();
       };
 
-      // Use a small delay to avoid closing immediately when opening
+      // Usar capture phase para capturar eventos antes de que se propaguen
+      // Reducir delay para evitar que clicks se propaguen antes de que los listeners estén activos
       const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-        document.addEventListener('click', handleClickOutside);
-        window.addEventListener('scroll', handleScroll, true); // Use capture phase to catch all scroll events
+        document.addEventListener('mousedown', handleClickOutside, true); // Capture phase
+        document.addEventListener('click', handleClickOutside, true); // Capture phase
+        window.addEventListener('scroll', handleScroll, true);
         window.addEventListener('resize', updatePosition);
-      }, 100);
+      }, 10);
 
       return () => {
         clearTimeout(timeoutId);
-        document.removeEventListener('mousedown', handleClickOutside);
-        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('mousedown', handleClickOutside, true);
+        document.removeEventListener('click', handleClickOutside, true);
         window.removeEventListener('scroll', handleScroll, true);
         window.removeEventListener('resize', updatePosition);
       };
@@ -66,23 +75,42 @@ export default function CustomSelect({ value, onChange, options = [], className 
   const handleSelect = (optionValue, e) => {
     e?.stopPropagation();
     e?.preventDefault();
-    if (onChange) {
-      onChange(optionValue);
-    }
+    
+    // Cerrar el dropdown antes de llamar onChange para evitar conflictos
     setIsOpen(false);
+    
+    // Usar setTimeout para asegurar que el estado se actualice antes de llamar onChange
+    // Aumentar el delay para evitar que el click se propague y cierre modales
+    setTimeout(() => {
+      if (onChange) {
+        onChange(optionValue);
+      }
+    }, 50);
   };
 
   const handleButtonClick = (e) => {
     e.stopPropagation();
+    e.preventDefault();
+    // Prevenir que el evento se propague hacia arriba en el árbol DOM
+    e.nativeEvent.stopImmediatePropagation();
     setIsOpen(!isOpen);
   };
 
   return (
-    <div className={`relative ${className}`} ref={selectRef}>
+    <div 
+      className={`relative ${className}`} 
+      ref={selectRef}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <button
         ref={buttonRef}
         type="button"
         onClick={handleButtonClick}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
         className={`h-9 px-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm border-2 border-primary focus:outline-none focus:ring-2 focus:ring-primary flex items-center justify-between gap-2 min-w-[120px] ${buttonClassName}`}
       >
         <span>{selectedOption?.label || ''}</span>
@@ -101,6 +129,8 @@ export default function CustomSelect({ value, onChange, options = [], className 
             width: `${dropdownPosition.width || 120}px`,
             minWidth: '120px'
           }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {options.map((opt) => {
             const isSelected = String(opt.value) === String(value);
